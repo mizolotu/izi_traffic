@@ -437,7 +437,7 @@ class Server():
 
     def listen(self):
         while True:
-            p = sniff(count=1, iface='Ethernet', filter='dst {0} and tcp[tcpflags] == tcp-syn'.format(self.host))
+            p = sniff(count=1, filter='dst {0} and tcp[tcpflags] == tcp-syn'.format(self.host))
             print(p[0][IP].src, p[0][IP].dst)
 
 class Client():
