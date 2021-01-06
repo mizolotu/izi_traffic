@@ -464,13 +464,13 @@ class Server():
 
     def _ack(self, p, client):
         client.ack = p[TCP].seq + len(p[Raw])
-        ack = self.ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+        ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
         send(ack)
 
     def _ack_rclose(self, client):
         client.connected = False
         client.ack += 1
-        fin_ack = self.ip / TCP(sport=self.port, dport=client.port, flags='FA', seq=client.seq, ack=client.ack)
+        fin_ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='FA', seq=client.seq, ack=client.ack)
         ack = sr1(fin_ack, timeout=self.timeout)
         client.seq += 1
 
@@ -480,10 +480,9 @@ class Server():
             p = s.recv(MTU)
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.port and p[TCP].sport == client.port:
                 self._ack(p, client)
-                p.show()
+                #self.send('345', client)
             if p.haslayer(TCP) and p[TCP].dport == self.port and p[TCP].sport == client.port and p[TCP].flags & 0x01 == 0x01:  # FIN
                 self._ack_rclose(client)
-                p.show()
         s.close()
 
     def _create_connection(self, client):
@@ -495,8 +494,8 @@ class Server():
         client.seq += len(psh[Raw])
         return psh
 
-    def send(self, payload):
-        psh = self.build(payload)
+    def send(self, payload, client):
+        psh = self.build(payload, client)
         ack = sr1(psh, timeout=self.timeout)
 
 class Session():
@@ -541,8 +540,10 @@ class Session():
         while self.connected:
             p = s.recv(MTU)
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
+                print('received something')
                 self._ack(p)
             if p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
+                print('received fin')
                 self._ack_rclose()
         s.close()
         self._ackThread = None
