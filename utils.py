@@ -1,10 +1,10 @@
-import socketserver
 import numpy as np
 import tflite_runtime.interpreter as tflite
+import netifaces
 
 from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MTU
 from threading import Thread
-import netifaces
+from time import sleep
 
 def restore_tcp(x, xmin, xmax):
     x = np.clip(x, xmin, xmax)
@@ -488,8 +488,8 @@ class Server():
                 client.npkts += 2
                 self.send('345', client)
                 client.npkts += 2
-                if client.npkts >= client.nmax - 3:
-                    self.close(client)
+                #if client.npkts >= client.nmax - 3:
+                #     self.close(client)
             if p.haslayer(TCP) and p[TCP].dport == self.port and p[TCP].sport == client.port and p[TCP].flags & 0x01 == 0x01:  # FIN
                 self._ack_rclose(client)
         s.close()
@@ -532,7 +532,6 @@ class Session():
         self.seq = np.random.randint(0, (2 ** 32) - 1)
         syn = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
         syn_ack = sr1(syn, timeout=self.timeout)
-        syn_ack.show()
         self.seq += 1
         self.ack = syn_ack[TCP].seq + 1
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
@@ -560,6 +559,7 @@ class Session():
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
                 print('received something')
                 self._ack(p)
+                self.send('345')
             if p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
                 print('received fin')
                 self._ack_rclose()
