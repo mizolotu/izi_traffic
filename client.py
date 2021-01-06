@@ -12,8 +12,9 @@ if __name__ == '__main__':
 
     parser = arp.ArgumentParser(description='Client')
     parser.add_argument('-i', '--iface', help='Interface', default='eth0')
-    parser.add_argument('-r', '--remote', help='Remote', default='172.17.0.3')
-    parser.add_argument('-p', '--port', help='Port', default=80, type=int)
+    parser.add_argument('-s', '--sport', help='Source port', default=1337, type=int)
+    parser.add_argument('-r', '--remote', help='Remote', default='172.17.0.1')
+    parser.add_argument('-d', '--dport', help='Destination port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
     args = parser.parse_args()
 
