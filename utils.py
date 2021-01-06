@@ -501,12 +501,11 @@ class Server():
 
 class Session():
 
-    def __init__(self, host, remote, port, tcp_gen_path, http_gen_path, timeout=3):
+    def __init__(self, host, sport, remote, dport, tcp_gen_path, http_gen_path, timeout=3):
         self.host = host
-        with socketserver.TCPServer(("localhost", 0), None) as s:
-            self.sport = s.server_address[1]
+        self.sport = sport
         self.remote = remote
-        self.dport = port
+        self.dport = dport
         self.ip = IP(src=host, dst=remote)
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)

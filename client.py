@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     host = netifaces.ifaddresses(args.iface)[2][0]['addr']
 
-    client = Session(host, args.remote, args.port, tcp_gen_path, http_gen_path)
+    client = Session(host, args.sport, args.remote, args.dport, tcp_gen_path, http_gen_path)
     client.connect()
     client.send('123')
     client.close()
