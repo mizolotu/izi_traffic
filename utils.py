@@ -562,8 +562,8 @@ class Session():
                 self._ack(p)
             if p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
                 print('received fin')
-                print(self.connected)
                 self._ack_rclose()
+                print(self.connected)
         s.close()
         self._ackThread = None
         print('Acknowledgment thread stopped')
