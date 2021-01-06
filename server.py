@@ -1,4 +1,3 @@
-import tensorflow as tf
 import argparse as arp
 import os.path as osp
 
@@ -20,7 +19,7 @@ if __name__ == '__main__':
     http_gen_path = osp.join(http_gen_dir, args.traffic)
 
     server = Server(args.iface, args.port, tcp_gen_path, http_gen_path)
-    server.listen('lo')
+    server.listen(args.iface)
 
     while True:
         sleep(1)

@@ -1,6 +1,6 @@
 import socketserver
 import numpy as np
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MTU
 from threading import Thread
@@ -440,8 +440,8 @@ class Server():
         self.iface = iface
         self.ip = netifaces.ifaddresses(iface)[2][0]['addr']
         self.port = port
-        self.tcp_model = tf.keras.models.load_model(tcp_gen_path)
-        self.http_model = tf.keras.models.load_model(http_gen_path)
+        self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
+        self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.clients = []
         self.timeout = timeout
 
