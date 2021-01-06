@@ -508,8 +508,8 @@ class Session():
         self.remote = remote
         self.dport = port
         self.ip = IP(src=host, dst=remote)
-        self.tcp_model = tf.keras.models.load_model(tcp_gen_path)
-        self.http_model = tf.keras.models.load_model(http_gen_path)
+        self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
+        self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.timeout = timeout
 
     def connect(self):
