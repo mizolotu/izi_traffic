@@ -3,7 +3,7 @@ import os.path as osp
 import netifaces
 
 from  time import sleep
-from utils import Session
+from utils import Client
 
 if __name__ == '__main__':
 
@@ -14,7 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--iface', help='Interface', default='eth0')
     parser.add_argument('-s', '--sport', help='Source port', default=1337, type=int)
     parser.add_argument('-r', '--remote', help='Remote', default='172.17.0.1')
-    parser.add_argument('-d', '--dport', help='Destination port', default=80, type=int)
+    parser.add_argument('-p', '--port', help='Destination port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
     args = parser.parse_args()
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     host = netifaces.ifaddresses(args.iface)[2][0]['addr']
 
-    client = Session(host, args.sport, args.remote, args.dport, tcp_gen_path, http_gen_path)
+    client = Client(args.port, args.remote)
     client.connect()
     client.send('123')
 

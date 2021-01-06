@@ -18,10 +18,7 @@ if __name__ == '__main__':
     tcp_gen_path = osp.join(tcp_gen_dir, '{0}.tflite'.format(args.traffic))
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
-    server = Server(args.iface, args.port, tcp_gen_path, http_gen_path)
-    server.listen(args.iface)
-
-    while True:
-        sleep(1)
+    server = Server(args.port, tcp_gen_path, http_gen_path)
+    server.serve()
 
 

@@ -1,10 +1,10 @@
 import numpy as np
 import tflite_runtime.interpreter as tflite
-import netifaces
+import netifaces, socket
 
 from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MTU
 from threading import Thread
-from time import sleep
+from time import sleep, time
 
 def restore_tcp(x, xmin, xmax):
     x = np.clip(x, xmin, xmax)
@@ -425,7 +425,7 @@ class Flow():
             self.idl_min  # 72
         ])
 
-class Client():
+class Client_():
 
     def __init__(self, ip, port, seq, nmax):
         self.ip = ip
@@ -436,7 +436,7 @@ class Client():
         self.npkts = 1
         self.nmax = nmax
 
-class Server():
+class Server_():
 
     def __init__(self, iface, port, tcp_gen_path, http_gen_path, nmin=10, nmax=15, timeout=3):
         self.iface = iface
@@ -448,10 +448,30 @@ class Server():
         self.timeout = timeout
         self.nmin, self.nmax = nmin, nmax
 
-    def listen(self, iface=None):
+    def listen_(self, iface=None):
         if iface is None:
             iface = self.iface
         sniff(prn=self._complete_handshake, iface=iface, filter='dst {0} and dst port {1} and tcp[tcpflags] == tcp-syn'.format(self.ip, self.port))
+
+    def listen(self, iface=None):
+        if iface is None:
+            iface = self.iface
+        sniff(prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port))
+
+    def process(self, pkt):
+        if pkt.haslayer(TCP):
+            if pkt[TCP].flags == 'S':
+                nmax = np.random.randint(self.nmin, self.nmax)
+                client = Client(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
+                print('New client')
+                print(client.ip, client.port)
+                ip = IP(src=self.ip, dst=client.ip)
+                tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
+                ack = sr1(ip / tcp, timeout=self.timeout)
+                client.connected = True
+                client.npkts += 2
+                self.clients.append(client)
+                self._create_connection(client)
 
     def _complete_handshake(self, pkt):
         if pkt.haslayer(TCP):
@@ -590,5 +610,76 @@ class Session():
     def send(self, payload):
         psh = self.build(payload)
         ack = sr1(psh, timeout=self.timeout)
+
+class Client():
+
+    def __init__(self, port, remote):
+        self.port = port
+        self.remote = remote
+        self.last_time = time()
+        self.npkts = 0
+
+    def connect(self):
+        self.t_start = time()
+        self.sckt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sckt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sckt.bind(('', self.port))
+        ready = False
+        while not ready:
+            try:
+                self.sckt.connect(self.remote)
+                ready = True
+            except Exception as e:
+                pass
+        self.last_time = time()
+
+    def send_psh_ack(self):
+        pkt_delay = 0
+        payload_size = 100
+        recv_buff = 10000
+        pkt = '123'
+        to_be_done = False
+        self.npkts += 2
+        t_now = time()
+        if pkt_delay > t_now - self.last_time:
+            sleep(np.maximum(0, pkt_delay - t_now + self.last_step_time))
+        self.sckt.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
+        try:
+            t_start_send = time()
+            self.sckt.sendall(pkt.encode('utf-8'))
+            t_sent = time() - t_start_send
+            if self.debug:
+                print('PACKET SENT:')
+                print(pkt)
+            t_rpl_start = time()
+            ack = self._process_reply()
+            t_rpl_proc = time() - t_rpl_start
+            if self.debug:
+                print('Time to send: {0}, time to process: {1}'.format(t_sent, t_rpl_proc))
+        except Exception as e:
+            pkts_req = None
+            ack = False
+            to_be_done = True
+
+class Server():
+
+    def __init__(self, port, tcp_gen_path, http_gen_path):
+
+        host = '0.0.0.0'
+        port = 80
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server_socket.bind((host, port))
+        self.server_socket.listen(1)
+        print('Listening on port %s ...' % port)
+
+    def serve(self):
+        while True:
+            client_connection, client_address = self.server_socket.accept()
+            request = client_connection.recv(4096)
+            response = 'HTTP/1.0 200 OK\n\nHello World'
+            client_connection.sendall(response.encode())
+
+
 
 
