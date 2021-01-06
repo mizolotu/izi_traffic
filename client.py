@@ -25,5 +25,6 @@ if __name__ == '__main__':
 
     client = Client(args.port, args.remote)
     client.connect()
-    client.send('123')
+    client.send_psh_ack()
+    client.sckt.close()
 
