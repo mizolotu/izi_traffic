@@ -26,5 +26,4 @@ if __name__ == '__main__':
     client = Session(host, args.sport, args.remote, args.dport, tcp_gen_path, http_gen_path)
     client.connect()
     client.send('123')
-    client.close()
 

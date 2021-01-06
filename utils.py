@@ -427,16 +427,18 @@ class Flow():
 
 class Client():
 
-    def __init__(self, ip, port, seq):
+    def __init__(self, ip, port, seq, nmax):
         self.ip = ip
         self.port = port
         self.seq = seq
         self.ack = seq + 1
         self.connected = False
+        self.npkts = 1
+        self.nmax = nmax
 
 class Server():
 
-    def __init__(self, iface, port, tcp_gen_path, http_gen_path, timeout=3):
+    def __init__(self, iface, port, tcp_gen_path, http_gen_path, nmin=10, nmax=15, timeout=3):
         self.iface = iface
         self.ip = netifaces.ifaddresses(iface)[2][0]['addr']
         self.port = port
@@ -444,6 +446,7 @@ class Server():
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.clients = []
         self.timeout = timeout
+        self.nmin, self.nmax = nmin, nmax
 
     def listen(self, iface=None):
         if iface is None:
@@ -452,13 +455,15 @@ class Server():
 
     def _complete_handshake(self, pkt):
         if pkt.haslayer(TCP):
-            client = Client(pkt[IP].src, pkt[TCP].sport, pkt.seq)
+            nmax = np.random.randint(self.nmin, self.nmax)
+            client = Client(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
             print('New client')
             print(client.ip, client.port)
             ip = IP(src=self.ip, dst=client.ip)
             tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
             ack = sr1(ip / tcp, timeout=self.timeout)
             client.connected = True
+            client.npkts += 2
             self.clients.append(client)
             self._create_connection(client)
 
@@ -480,7 +485,11 @@ class Server():
             p = s.recv(MTU)
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.port and p[TCP].sport == client.port:
                 self._ack(p, client)
-                #self.send('345', client)
+                client.npkts += 2
+                self.send('345', client)
+                client.npkts += 2
+                if client.npkts >= client.nmax - 3:
+                    self.close(client)
             if p.haslayer(TCP) and p[TCP].dport == self.port and p[TCP].sport == client.port and p[TCP].flags & 0x01 == 0x01:  # FIN
                 self._ack_rclose(client)
         s.close()
@@ -490,13 +499,22 @@ class Server():
         _connection_thread.start()
 
     def build(self, payload, client):
-        psh = self.ip / TCP(sport=self.port, dport=client.port, flags='PA', seq=client.seq, ack=client.ack) / payload
+        psh = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='PA', seq=client.seq, ack=client.ack) / payload
         client.seq += len(psh[Raw])
         return psh
 
     def send(self, payload, client):
         psh = self.build(payload, client)
-        ack = sr1(psh, timeout=self.timeout)
+        sr1(psh, timeout=self.timeout)
+
+    def close(self, client):
+        client.connected = False
+        fin = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='FA', seq=client.seq, ack=client.ack)
+        fin_ack = sr1(fin, timeout=self.timeout)
+        client.seq += 1
+        client.ack = fin_ack[TCP].seq + 1
+        ack = self.ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+        send(ack)
 
 class Session():
 
