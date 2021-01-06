@@ -1,9 +1,10 @@
-import socket
+import socketserver
 import numpy as np
 import tensorflow as tf
 
-from scapy.all import *
+from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MTU
 from threading import Thread
+import netifaces
 
 def restore_tcp(x, xmin, xmax):
     x = np.clip(x, xmin, xmax)
@@ -424,37 +425,151 @@ class Flow():
             self.idl_min  # 72
         ])
 
+class Client():
+
+    def __init__(self, ip, port, seq):
+        self.ip = ip
+        self.port = port
+        self.seq = seq
+        self.ack = seq + 1
+        self.connected = False
+
 class Server():
 
-    def __init__(self, host, port, tcp_gen_path, http_gen_path):
-        self.host = host
+    def __init__(self, iface, port, tcp_gen_path, http_gen_path, timeout=3):
+        self.iface = iface
+        self.ip = netifaces.ifaddresses(iface)[2][0]['addr']
         self.port = port
         self.tcp_model = tf.keras.models.load_model(tcp_gen_path)
         self.http_model = tf.keras.models.load_model(http_gen_path)
         self.clients = []
+        self.timeout = timeout
 
-        lth = Thread(target=self.listen)
+    def listen(self, iface=None):
+        if iface is None:
+            iface = self.iface
+        sniff(prn=self._complete_handshake, iface=iface, filter='dst {0} and dst port {1} and tcp[tcpflags] == tcp-syn'.format(self.ip, self.port))
 
-    def listen(self):
-        while True:
-            p = sniff(count=1, filter='dst {0} and tcp[tcpflags] == tcp-syn'.format(self.host))
-            print(p[0][IP].src, p[0][IP].dst)
+    def _complete_handshake(self, pkt):
+        if pkt.haslayer(TCP):
+            client = Client(pkt[IP].src, pkt[TCP].sport, pkt.seq)
+            print('New client')
+            print(client.ip, client.port)
+            ip = IP(src=self.ip, dst=client.ip)
+            tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
+            ack = sr1(ip / tcp, timeout=self.timeout)
+            client.connected = True
+            self.clients.append(client)
+            self._create_connection(client)
 
-class Client():
+    def _ack(self, p, client):
+        client.ack = p[TCP].seq + len(p[Raw])
+        ack = self.ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+        send(ack)
 
-    def __init__(self, host, remote, port, tcp_gen_path, http_gen_path):
+    def _ack_rclose(self, client):
+        client.connected = False
+        client.ack += 1
+        fin_ack = self.ip / TCP(sport=self.port, dport=client.port, flags='FA', seq=client.seq, ack=client.ack)
+        ack = sr1(fin_ack, timeout=self.timeout)
+        client.seq += 1
+
+    def _sniff(self, client):
+        s = L3RawSocket(filter='src {0} and src port {1} and dst {2} and dst port {3}'.format(client.ip, client.port, self.ip, self.port))
+        while client.connected:
+            p = s.recv(MTU)
+            if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.port and p[TCP].sport == client.port:
+                self._ack(p, client)
+                p.show()
+            if p.haslayer(TCP) and p[TCP].dport == self.port and p[TCP].sport == client.port and p[TCP].flags & 0x01 == 0x01:  # FIN
+                self._ack_rclose(client)
+                p.show()
+        s.close()
+
+    def _create_connection(self, client):
+        _connection_thread = Thread(target=self._sniff, args=(client, ), daemon=True)
+        _connection_thread.start()
+
+    def build(self, payload, client):
+        psh = self.ip / TCP(sport=self.port, dport=client.port, flags='PA', seq=client.seq, ack=client.ack) / payload
+        client.seq += len(psh[Raw])
+        return psh
+
+    def send(self, payload):
+        psh = self.build(payload)
+        ack = sr1(psh, timeout=self.timeout)
+
+class Session():
+
+    def __init__(self, host, remote, port, tcp_gen_path, http_gen_path, timeout=3):
         self.host = host
+        with socketserver.TCPServer(("localhost", 0), None) as s:
+            self.sport = s.server_address[1]
         self.remote = remote
-        self.port = port
+        self.dport = port
+        self.ip = IP(src=host, dst=remote)
         self.tcp_model = tf.keras.models.load_model(tcp_gen_path)
         self.http_model = tf.keras.models.load_model(http_gen_path)
+        self.timeout = timeout
 
     def connect(self):
-        ip = IP(src=self.host, dst=self.remote)
-        tcp_syn = TCP(sport=RandShort(), dport=self.port, flags="S", options=[('MSS', 1460)])
-        pkt = ip / tcp_syn
-        pkt.show()
-        send(ip/tcp_syn)
+        self.seq = np.random.randint(0, (2 ** 32) - 1)
+        syn = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
+        syn_ack = sr1(syn, timeout=self.timeout)
+        syn_ack.show()
+        self.seq += 1
+        self.ack = syn_ack[TCP].seq + 1
+        ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
+        send(ack)
+        self.connected = True
+        self._start_ackThread()
+        print('Connected')
 
+    def _ack(self, p):
+        self.ack = p[TCP].seq + len(p[Raw])
+        ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
+        send(ack)
+
+    def _ack_rclose(self):
+        self.connected = False
+        self.ack += 1
+        fin_ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
+        ack = sr1(fin_ack, timeout=self.timeout)
+        self.seq += 1
+
+    def _sniff(self):
+        s = L3RawSocket()
+        while self.connected:
+            p = s.recv(MTU)
+            if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
+                self._ack(p)
+            if p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
+                self._ack_rclose()
+        s.close()
+        self._ackThread = None
+        print('Acknowledgment thread stopped')
+
+    def _start_ackThread(self):
+        self._ackThread = Thread(name='AckThread', target=self._sniff)
+        self._ackThread.start()
+
+    def close(self):
+        self.connected = False
+        fin = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
+        fin_ack = sr1(fin, timeout=self.timeout)
+        self.seq += 1
+        self.ack = fin_ack[TCP].seq + 1
+        ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
+        send(ack)
+        print('Disconnected')
+
+    def build(self, payload):
+        psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / payload
+        self.seq += len(psh[Raw])
+        return psh
+
+    def send(self, payload):
+        psh = self.build(payload)
+        ack = sr1(psh, timeout=self.timeout)
 
 
