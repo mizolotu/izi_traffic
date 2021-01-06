@@ -618,6 +618,7 @@ class Client():
         self.remote = remote
         self.last_time = time()
         self.npkts = 0
+        self.debug = True
 
     def connect(self):
         self.t_start = time()
@@ -664,7 +665,6 @@ class Client():
 class Server():
 
     def __init__(self, port, tcp_gen_path, http_gen_path):
-
         host = '0.0.0.0'
         port = 80
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -676,7 +676,7 @@ class Server():
     def serve(self):
         while True:
             client_connection, client_address = self.server_socket.accept()
-            request = client_connection.recv(4096)
+            client_connection.recv(4096)
             response = 'HTTP/1.0 200 OK\n\nHello World'
             client_connection.sendall(response.encode())
 
