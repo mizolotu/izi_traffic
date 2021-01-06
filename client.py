@@ -11,7 +11,7 @@ if __name__ == '__main__':
     http_gen_dir = 'generators/http'
 
     parser = arp.ArgumentParser(description='Client')
-    parser.add_argument('-i', '--iface', help='Interface', default='')
+    parser.add_argument('-i', '--iface', help='Interface', default='eth0')
     parser.add_argument('-r', '--remote', help='Remote', default='172.17.0.3')
     parser.add_argument('-p', '--port', help='Port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
