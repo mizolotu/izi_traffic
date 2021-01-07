@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     host = netifaces.ifaddresses(args.iface)[2][0]['addr']
 
-    client = Client(args.sport, args.remote, args.dport)
+    client = Client(args.remote, args.dport)
     client.connect()
     client._send_req()
     client.sckt.close()
