@@ -456,6 +456,7 @@ class Connection():
         self.npkts = 1
         self.nmax = nmax
         self.lasttime = time()
+        self.status = 'syn'
 
 class Server_():
 
@@ -478,7 +479,7 @@ class Server_():
         if iface is None:
             iface = self.iface
         while True:
-            sniff(count=1, prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port))
+            sniff(prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port), store=True)
 
     def process(self, pkt):
         if pkt.haslayer(TCP):
@@ -489,28 +490,33 @@ class Server_():
             if flags == 'S':
                 nmax = np.random.randint(self.nmin, self.nmax)
                 client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
-                print('New client')
-                print(client.ip, client.port)
+                print('New client: {0}:{1}'.format(client.ip, client.port))
                 ip = IP(src=self.ip, dst=client.ip)
                 tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
-                ack = sr1(ip / tcp, timeout=self.timeout)
-                client.connected = True
-                client.npkts += 2
+                send(ip / tcp)
+                client.status = 'syn-ack'
+                client.npkts += 1
                 self.clients.append(client)
-            elif flags == 'PA':
+            else:
                 poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
                 if len(poitential_clients) == 1:
                     client = poitential_clients[0]
                     client.lasttime = time()
-                    ip = IP(src=self.ip, dst=client.ip)
-                    client.ack = pkt[TCP].seq + len(pkt[Raw])
-                    client.seq += 1
-                    ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
-                    send(ack)
-                    tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack)
-                    ack = sr1(ip / tcp, timeout=self.timeout)
-                    client.npkts  += 4
-                    print(client.npkts)
+                    if flags == 'A':
+                        if client.status == 'syn-ack':
+                            client.status = 'established'
+                        client.npkts += 1
+                    elif flags == 'PA':
+                        ip = IP(src=self.ip, dst=client.ip)
+                        client.ack = pkt[TCP].seq + len(pkt[Raw])
+                        client.seq += 1
+                        ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+                        send(ack)
+                        tcp = TCP(sport=self.port, dport=client.port, flags="PA", seq=client.seq, ack=client.ack)
+                        send(ip / tcp)
+                        client.npkts  += 3
+                else:
+                    print(len(self.clients))
 
     def _complete_handshake(self, pkt):
         if pkt.haslayer(TCP):
@@ -615,6 +621,7 @@ class Session():
         s = L3RawSocket()
         while self.connected:
             p = s.recv(MTU)
+            p.show()
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
                 print('received something')
                 self._ack(p)
