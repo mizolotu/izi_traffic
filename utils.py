@@ -15,7 +15,8 @@ def labeler(packet, label):
         if idx > 0:
             bitlabel = 1
             pkt[IP].tos = pkt[IP].tos | bitlabel
-    pkt.accept()
+            packet.set_payload(bytes(pkt))
+    packet.accept()
 
 def generate(interpreter, direction, flags):
     interpreter.allocate_tensors()
@@ -764,7 +765,7 @@ class Server():
             pkt_delay = self.iats_ack[idx]
             sleep(pkt_delay)
             data = connection.recv(2048)
-            idx = np.random.randint(0, len(self.iats))
+            idx = np.random.randint(0, len(self.iats_psh))
             pkt_delay = self.iats_psh[idx]
             recv_buff = self.wsizes_psh[idx]
             payload = self.payloads[idx]
