@@ -14,6 +14,7 @@ def labeler(packet, label):
     if pkt.haslayer(TCP):
         if idx > 0:
             bitlabel = 1
+            pkt[IP].tos = 0x01
             #pkt[IP].tos = pkt[IP].tos | bitlabel
             packet.set_payload(bytes(pkt))
     packet.accept()
