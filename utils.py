@@ -613,7 +613,7 @@ class Session():
 
 class Client():
 
-    def __init__(self, remote, dport, sport=''):
+    def __init__(self, sport, remote, dport):
         self.sport = sport
         self.dport = dport
         self.remote = remote
