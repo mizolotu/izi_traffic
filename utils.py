@@ -7,6 +7,37 @@ from threading import Thread
 from time import sleep, time
 from _thread import start_new_thread
 
+import os, json
+import os.path as osp
+import tensorflow as tf
+import numpy as np
+
+def load_batches(path, batch_size, nfeatures, nselect):
+    batches = tf.data.experimental.make_csv_dataset(
+        path,
+        batch_size=batch_size,
+        header=False,
+        shuffle=True,
+        column_names=[str(i) for i in range(nfeatures)],
+        column_defaults=[tf.float32 for _ in range(nselect)],
+        select_columns=[str(i) for i in range(nselect)],
+        label_name='{0}'.format(nselect - 1),
+    )
+    return batches
+
+def classification_mapper(features, label, xmin, xmax, eps=1e-10):
+    features = (tf.stack(list(features.values()), axis=-1) - xmin) / (xmax - xmin + eps)
+    label = tf.clip_by_value(label, 0, 1)
+    return features, label
+
+def exclude_feature_mapper(features, label, idx):
+    return features * idx, label
+
+def concat_batches(b1, b2):
+    features1, labels1 = b1
+    features2, labels2 = b2
+    return ({feature: tf.concat([features1[feature], features2[feature]], axis=0) for feature in features1.keys()}, tf.concat([labels1, labels2], axis=0))
+
 def generate(interpreter, direction):
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
@@ -632,7 +663,7 @@ class Session():
 
 class Client():
 
-    def __init__(self, sport, remote, dport, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, npkts_min=10, npkts_max=11):
+    def __init__(self, sport, remote, dport, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, npkts_min, npkts_max):
         self.sport = sport
         self.dport = dport
         self.remote = remote
@@ -647,7 +678,7 @@ class Client():
         http_x_max = np.array(http_x_max)
         self.iats, self.psizes, self.wsizes = restore_tcp(generate(self.tcp_interpreter, [1, 0]), tcp_x_min, tcp_x_max)
         self.payloads = restore_http(generate(self.http_interpreter, [1, 0]), http_x_min, http_x_max, self.psizes)
-        self.npkts = np.random.randint(npkts_min, npkts_max)
+        self.npkts = np.minimum(np.random.randint(npkts_min, npkts_max), len(self.payloads))
 
     def connect(self):
         self.t_start = time()

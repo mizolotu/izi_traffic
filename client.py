@@ -20,17 +20,23 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--remote', help='Remote', default='172.17.0.1')
     parser.add_argument('-d', '--dport', help='Destination port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
+    parser.add_argument('-n', '--nflows', help='Number of flows', default=None, type=int)
     args = parser.parse_args()
 
     tcp_gen_path = osp.join(tcp_gen_dir, '{0}.tflite'.format(args.traffic))
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
-    client = Client(
-        args.sport, args.remote, args.dport,
-        tcp_gen_path, http_gen_path,
-        tcp_meta['xmin'], tcp_meta['xmax'],
-        http_meta['xmin'], http_meta['xmax'],
-        tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic]
-    )
-    client.connect()
-    client.send_and_rcv()
+    flow_count = 0
+    while True:
+        client = Client(
+            args.sport, args.remote, args.dport,
+            tcp_gen_path, http_gen_path,
+            tcp_meta['xmin'], tcp_meta['xmax'],
+            http_meta['xmin'], http_meta['xmax'],
+            tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic]
+        )
+        client.connect()
+        client.send_and_rcv()
+        flow_count += 1
+        if args.nflows is not None and flow_count >= args.nflows:
+            break
