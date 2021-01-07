@@ -607,10 +607,7 @@ class Session():
         print('Connected')
 
     def _ack(self, p):
-        if p.haslayer(Raw):
-            self.ack = p[TCP].seq + len(p[Raw])
-        else:
-            self.ack = p[TCP].seq
+        self.ack = p[TCP].seq + len(p[Raw])
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
         send(ack)
 
@@ -626,10 +623,10 @@ class Session():
         while self.connected:
             p = s.recv(MTU)
             p.show()
-            if p.haslayer(TCP) and p[TCP].dport == self.sport:
+            if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
                 print('received something')
                 self._ack(p)
-            if p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
+            elif p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
                 print('received fin')
                 self._ack_rclose()
         s.close()
