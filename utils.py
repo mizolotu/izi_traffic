@@ -725,15 +725,11 @@ class Server():
         self.server_socket.listen()
 
     def threaded_client(self, connection):
-        n = 3
         connection.send(str.encode('Welcome to the Server\n'))
-        n += 2
         while True:
             data = connection.recv(2048)
             reply = 'Server Says: ' + data.decode('utf-8')
-            n += 4
-            if not data or n > 100:
-                print(n)
+            if not data:
                 break
             connection.sendall(str.encode(reply))
         connection.close()
