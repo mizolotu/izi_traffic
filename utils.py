@@ -613,7 +613,7 @@ class Session():
 
 class Client():
 
-    def __init__(self, sport, remote, dport):
+    def __init__(self, remote, dport, sport=''):
         self.sport = sport
         self.dport = dport
         self.remote = remote
@@ -635,16 +635,15 @@ class Client():
                 pass
         self.last_time = time()
 
-    def send_psh_ack(self):
+    def _send_req(self):
         pkt_delay = 0
         payload_size = 100
         recv_buff = 10000
         pkt = '123'
-        to_be_done = False
         self.npkts += 2
         t_now = time()
         if pkt_delay > t_now - self.last_time:
-            sleep(np.maximum(0, pkt_delay - t_now + self.last_step_time))
+            sleep(np.maximum(0, pkt_delay - t_now + self.last_time))
         self.sckt.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
         try:
             t_start_send = time()
@@ -654,14 +653,24 @@ class Client():
                 print('PACKET SENT:')
                 print(pkt)
             t_rpl_start = time()
-            ack = self._process_reply()
+            ack = self._recv_rpl()
             t_rpl_proc = time() - t_rpl_start
             if self.debug:
                 print('Time to send: {0}, time to process: {1}'.format(t_sent, t_rpl_proc))
         except Exception as e:
-            pkts_req = None
             ack = False
-            to_be_done = True
+
+    def _recv_rpl(self):
+        try:
+            reply = self.sckt.recv(4096).decode('utf-8')
+            if self.debug:
+                print('PACKET RECEIVED:')
+                print(reply)
+            ack = True
+        except Exception as e:
+            print(e)
+            ack = False
+        return ack
 
 class Server():
 
@@ -671,7 +680,7 @@ class Server():
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((host, port))
-        self.server_socket.listen(1)
+        self.server_socket.listen()
         print('Listening on port %s ...' % port)
 
     def serve(self):
