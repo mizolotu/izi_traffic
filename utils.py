@@ -640,7 +640,7 @@ class Client():
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.last_time = time()
         self.npkts = 0
-        self.debug = True
+        self.debug = False
         tcp_x_min = np.array(tcp_x_min)
         tcp_x_max = np.array(tcp_x_max)
         http_x_min = np.array(http_x_min)
@@ -660,7 +660,7 @@ class Client():
                 self.sckt.connect((self.remote, self.dport))
                 ready = True
             except Exception as e:
-                pass
+                print(e)
         self.last_time = time()
         self.npkts_now = 3
 
@@ -695,6 +695,7 @@ class Client():
             if self.debug:
                 print('Time to send: {0}, time to process: {1}'.format(t_sent, t_rpl_proc))
         except Exception as e:
+            print(e)
             ack = False
 
     def _recv_rpl(self):
@@ -729,6 +730,6 @@ class Server():
         while True:
             client_connection, client_address = self.server_socket.accept()
             req = client_connection.recv(4096)
-            print(req)
+            print(client_address)
             response = 'HTTP/1.0 200 OK\n\nHello World'
             client_connection.sendall(response.encode())
