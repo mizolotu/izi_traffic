@@ -8,7 +8,8 @@ from _thread import start_new_thread
 
 import numpy as np
 
-def labeler(pkt, label):
+def labeler(packet, label):
+    pkt = IP(packet.get_payload())
     idx = int(label.split('_')[1])
     if pkt.haslayer(TCP):
         if idx > 0:
