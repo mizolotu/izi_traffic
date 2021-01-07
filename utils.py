@@ -639,7 +639,7 @@ class Client():
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.last_time = time()
-        self.npkts = 0
+        self.npkts_now = 0
         self.debug = False
         tcp_x_min = np.array(tcp_x_min)
         tcp_x_max = np.array(tcp_x_max)
@@ -667,7 +667,7 @@ class Client():
     def send_and_rcv(self):
         while self.npkts_now < self.npkts:
             self._send_req()
-            print(self.npkts)
+            print(self.npkts_now)
         print('here')
         self._close()
 
@@ -685,6 +685,7 @@ class Client():
         try:
             t_start_send = time()
             self.sckt.sendall(payload.encode('utf-8'))
+            print('sent: {0}'.format(len(payload)))
             t_sent = time() - t_start_send
             if self.debug:
                 print('PACKET SENT:')
@@ -701,6 +702,7 @@ class Client():
     def _recv_rpl(self):
         try:
             reply = self.sckt.recv(4096).decode('utf-8')
+            print('received: {0}'.format(len(reply)))
             if self.debug:
                 print('PACKET RECEIVED:')
                 print(reply)
@@ -728,8 +730,15 @@ class Server():
 
     def serve(self):
         while True:
-            client_connection, client_address = self.server_socket.accept()
-            req = client_connection.recv(4096)
-            print(client_address)
-            response = 'HTTP/1.0 200 OK\n\nHello World'
-            client_connection.sendall(response.encode())
+            try:
+                client_connection, client_address = self.server_socket.accept()
+                print(client_address)
+                req = client_connection.recv(4096)
+                print('received {0}'.format(len(req)))
+                response = 'asdasdsadasdasdsadasdasd'
+
+                a = client_connection.sendall(response.encode())
+                print(a)
+                print('sent {0}'.format(len(response)))
+            except Exception as e:
+                print(e)
