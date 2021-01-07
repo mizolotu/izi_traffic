@@ -677,8 +677,9 @@ class Client():
         payload = self.payloads[idx]
         self.npkts_now += 2
         t_now = time()
-        if pkt_delay > t_now - self.last_time:
-            sleep(np.maximum(0, pkt_delay - t_now + self.last_time))
+        #if pkt_delay > t_now - self.last_time:
+        #sleep(np.maximum(0, pkt_delay - t_now + self.last_time))
+        sleep(pkt_delay)
         self.sckt.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
         try:
             t_start_send = time()
@@ -737,8 +738,9 @@ class Server():
         recv_buff = self.wsizes[idx]
         payload = self.payloads[idx]
         t_now = time()
-        if pkt_delay > t_now - last_time:
-            sleep(np.maximum(0, pkt_delay - t_now + last_time))
+        #if pkt_delay > t_now - last_time:
+        #    sleep(np.maximum(0, pkt_delay - t_now + last_time))
+        sleep(pkt_delay)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
         connection.send(payload.encode('utf-8'))
         last_time = time()
@@ -749,8 +751,9 @@ class Server():
             recv_buff = self.wsizes[idx]
             payload = self.payloads[idx]
             t_now = time()
-            if pkt_delay > t_now - last_time:
-                sleep(np.maximum(0, pkt_delay - t_now + last_time))
+            #if pkt_delay > t_now - last_time:
+            #    sleep(np.maximum(0, pkt_delay - t_now + last_time))
+            sleep(pkt_delay)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
             if not data:
                 break
