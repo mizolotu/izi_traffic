@@ -42,3 +42,4 @@ if __name__ == '__main__':
     #        break
 
     session = Session(args.iface, args.sport, args.remote, args.dport, tcp_gen_path, http_gen_path)
+    session.connect()
