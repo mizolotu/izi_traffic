@@ -573,12 +573,12 @@ class Server_():
 
 class Session():
 
-    def __init__(self, host, sport, remote, dport, tcp_gen_path, http_gen_path, timeout=3):
-        self.host = host
+    def __init__(self, iface, sport, remote, dport, tcp_gen_path, http_gen_path, timeout=3):
+        self.host = netifaces.ifaddresses(iface)[2][0]['addr']
         self.sport = sport
         self.remote = remote
         self.dport = dport
-        self.ip = IP(src=host, dst=remote)
+        self.ip = IP(src=self.host, dst=remote)
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.timeout = timeout
