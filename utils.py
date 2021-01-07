@@ -625,11 +625,11 @@ class Client():
         self.t_start = time()
         self.sckt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sckt.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sckt.bind(('', self.port))
+        self.sckt.bind(('', self.sport))
         ready = False
         while not ready:
             try:
-                self.sckt.connect(self.remote)
+                self.sckt.connect((self.remote, self.dport))
                 ready = True
             except Exception as e:
                 pass
