@@ -681,7 +681,7 @@ class Client():
         self._close()
 
     def _send_req(self):
-        idx = np.random.randint(0, len(self.iats))
+        idx = np.random.randint(0, len(self.iats_psh))
         pkt_delay = self.iats_psh[idx]
         recv_buff = self.wsizes_psh[idx]
         payload = self.payloads[idx]
