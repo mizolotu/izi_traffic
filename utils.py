@@ -37,7 +37,6 @@ def restore_http(x, xmin, xmax, psizes):
     for item, psize in zip(p, psizes):
         probs = item / np.sum(item)
         payloads.append(''.join([chr(a) for a in np.random.choice(256, psize, p=probs)]))
-    print(len(payloads))
     return payloads
 
 class Flow():
@@ -714,7 +713,7 @@ class Client():
 
 class Server():
 
-    def __init__(self, port, tcp_gen_path, http_gen_path):
+    def __init__(self, port, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max):
         host = '0.0.0.0'
         port = 80
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
@@ -723,15 +722,39 @@ class Server():
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((host, port))
         self.server_socket.listen()
+        tcp_x_min = np.array(tcp_x_min)
+        tcp_x_max = np.array(tcp_x_max)
+        http_x_min = np.array(http_x_min)
+        http_x_max = np.array(http_x_max)
+        self.iats, self.psizes, self.wsizes = restore_tcp(generate(self.tcp_interpreter, [1, 0]), tcp_x_min, tcp_x_max)
+        self.payloads = restore_http(generate(self.http_interpreter, [1, 0]), http_x_min, http_x_max, self.psizes)
 
     def threaded_client(self, connection):
-        connection.send(str.encode('Welcome to the Server\n'))
+        last_time = time()
+        idx = np.random.randint(0, len(self.iats))
+        pkt_delay = self.iats[idx]
+        recv_buff = self.wsizes[idx]
+        payload = self.payloads[idx]
+        t_now = time()
+        if pkt_delay > t_now - last_time:
+            sleep(np.maximum(0, pkt_delay - t_now + last_time))
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
+        connection.send(payload.encode('utf-8'))
+        last_time = time()
         while True:
             data = connection.recv(2048)
-            reply = 'Server Says: ' + data.decode('utf-8')
+            idx = np.random.randint(0, len(self.iats))
+            pkt_delay = self.iats[idx]
+            recv_buff = self.wsizes[idx]
+            payload = self.payloads[idx]
+            t_now = time()
+            if pkt_delay > t_now - last_time:
+                sleep(np.maximum(0, pkt_delay - t_now + last_time))
+            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
             if not data:
                 break
-            connection.sendall(str.encode(reply))
+            connection.sendall(payload.encode('utf-8'))
+            last_time = time()
         connection.close()
 
     def serve(self):
@@ -739,10 +762,7 @@ class Server():
         while True:
             try:
                 client_connection, client_address = self.server_socket.accept()
-                print(client_address)
                 start_new_thread(self.threaded_client, (client_connection,))
                 ThreadCount += 1
-                print('Thread Number: ' + str(ThreadCount))
-
             except Exception as e:
                 print(e)
