@@ -622,14 +622,12 @@ class Session():
         while self.connected:
             p = s.recv(MTU)
             p.show()
-            if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
+            if p.haslayer(TCP) and p[TCP].dport == self.sport:
                 print('received something')
                 self._ack(p)
-                self.send('345')
             if p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
                 print('received fin')
                 self._ack_rclose()
-                print(self.connected)
         s.close()
         self._ackThread = None
         print('Acknowledgment thread stopped')
