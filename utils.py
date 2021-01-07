@@ -8,6 +8,14 @@ from _thread import start_new_thread
 
 import numpy as np
 
+def labeler(pkt, label):
+    idx = int(label.split('_')[1])
+    if pkt.haslayer(TCP):
+        if idx > 0:
+            bitlabel = 1
+            pkt[IP].tos = pkt[IP].tos | bitlabel
+    pkt.accept()
+
 def generate(interpreter, direction, flags):
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
