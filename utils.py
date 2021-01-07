@@ -676,6 +676,7 @@ class Client():
         pkt_delay = self.iats[idx]
         recv_buff = self.wsizes[idx]
         payload = self.payloads[idx]
+        print(pkt_delay, recv_buff, len(payload))
         self.npkts_now += 2
         t_now = time()
         if pkt_delay > t_now - self.last_time:
