@@ -1,11 +1,15 @@
 import argparse as arp
 import os.path as osp
-import netifaces
+import json
 
-from  time import sleep
 from utils import Client
 
 if __name__ == '__main__':
+
+    with open(osp.join('generators', 'tcp', 'metainfo.json'), 'r') as f:
+        tcp_meta = json.load(f)
+    with open(osp.join('generators', 'http', 'metainfo.json'), 'r') as f:
+        http_meta = json.load(f)
 
     tcp_gen_dir = 'generators/tcp'
     http_gen_dir = 'generators/http'
@@ -21,10 +25,11 @@ if __name__ == '__main__':
     tcp_gen_path = osp.join(tcp_gen_dir, '{0}.tflite'.format(args.traffic))
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
-    host = netifaces.ifaddresses(args.iface)[2][0]['addr']
-
-    client = Client(args.sport, args.remote, args.dport)
+    client = Client(
+        args.sport, args.remote, args.dport,
+        tcp_gen_path, http_gen_path,
+        tcp_meta['xmin'], tcp_meta['xmax'],
+        http_meta['xmin'], http_meta['xmax'],
+    )
     client.connect()
-    client._send_req()
-    client.sckt.close()
-
+    client.send_and_rcv()

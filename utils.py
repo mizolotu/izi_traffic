@@ -6,19 +6,38 @@ from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MT
 from threading import Thread
 from time import sleep, time
 
+def generate(interpreter, direction):
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    input1_shape = input_details[0]['shape']
+    batchsize = input1_shape[0]
+    input1 = np.array(np.random.randn(batchsize, input1_shape[1]), dtype=np.float32)
+    direction = np.ones((batchsize, 1)) * np.array(direction)
+    input2 = np.array(np.hstack([direction, np.zeros((batchsize, 3)), np.ones((batchsize, 2)), np.zeros((batchsize, 3))]), dtype=np.float32)
+    interpreter.set_tensor(input_details[0]['index'], input1)
+    interpreter.set_tensor(input_details[1]['index'], input2)
+    interpreter.invoke()
+    x = interpreter.get_tensor(output_details[0]['index'])
+    return x
+
 def restore_tcp(x, xmin, xmax):
     x = np.clip(x, xmin, xmax)
-    p = x * (xmax - xmin) + xmin
-    iat = p[0] - xmin[0]
-    psize = int(p[1])
-    wsize = int(p[2])
-    return iat, psize, wsize
+    p = x * (xmax - xmin)[None, :] + xmin[None, :]
+    iats = p[:, 0] - xmin[0]
+    psizes = [int(item) for item in p[:, 1]]
+    wsizes = [int(item) for item in p[:, 2]]
+    return iats, psizes, wsizes
 
-def restore_http(x, xmin, xmax, psize):
+def restore_http(x, xmin, xmax, psizes):
     x = np.clip(x, xmin, xmax)
-    p = x * (xmax - xmin) + xmin
-    payload = np.random.choice(256, psize, p=x)
-    return
+    p = x * (xmax - xmin)[None, :] + xmin[None, :]
+    payloads = []
+    for item, psize in zip(p, psizes):
+        probs = item / np.sum(item)
+        payloads.append(''.join([chr(a) for a in np.random.choice(256, psize, p=probs)]))
+    print(len(payloads))
+    return payloads
 
 class Flow():
 
@@ -613,13 +632,22 @@ class Session():
 
 class Client():
 
-    def __init__(self, sport, remote, dport):
+    def __init__(self, sport, remote, dport, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, npkts_min=10, npkts_max=11):
         self.sport = sport
         self.dport = dport
         self.remote = remote
+        self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
+        self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.last_time = time()
         self.npkts = 0
         self.debug = True
+        tcp_x_min = np.array(tcp_x_min)
+        tcp_x_max = np.array(tcp_x_max)
+        http_x_min = np.array(http_x_min)
+        http_x_max = np.array(http_x_max)
+        self.iats, self.psizes, self.wsizes = restore_tcp(generate(self.tcp_interpreter, [1, 0]), tcp_x_min, tcp_x_max)
+        self.payloads = restore_http(generate(self.http_interpreter, [1, 0]), http_x_min, http_x_max, self.psizes)
+        self.npkts = np.random.randint(npkts_min, npkts_max)
 
     def connect(self):
         self.t_start = time()
@@ -634,24 +662,32 @@ class Client():
             except Exception as e:
                 pass
         self.last_time = time()
+        self.npkts_now = 3
+
+    def send_and_rcv(self):
+        while self.npkts_now < self.npkts:
+            self._send_req()
+            print(self.npkts)
+        print('here')
+        self._close()
 
     def _send_req(self):
-        pkt_delay = 0
-        payload_size = 100
-        recv_buff = 10000
-        pkt = '123'
-        self.npkts += 2
+        idx = np.random.randint(0, len(self.iats))
+        pkt_delay = self.iats[idx]
+        recv_buff = self.wsizes[idx]
+        payload = self.payloads[idx]
+        self.npkts_now += 2
         t_now = time()
         if pkt_delay > t_now - self.last_time:
             sleep(np.maximum(0, pkt_delay - t_now + self.last_time))
         self.sckt.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buff)
         try:
             t_start_send = time()
-            self.sckt.sendall(pkt.encode('utf-8'))
+            self.sckt.sendall(payload.encode('utf-8'))
             t_sent = time() - t_start_send
             if self.debug:
                 print('PACKET SENT:')
-                print(pkt)
+                print(payload)
             t_rpl_start = time()
             ack = self._recv_rpl()
             t_rpl_proc = time() - t_rpl_start
@@ -672,16 +708,21 @@ class Client():
             ack = False
         return ack
 
+    def _close(self):
+        self.sckt.close()
+
 class Server():
 
     def __init__(self, port, tcp_gen_path, http_gen_path):
         host = '0.0.0.0'
         port = 80
+        self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
+        self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((host, port))
         self.server_socket.listen()
-        print('Listening on port %s ...' % port)
+        print('Listening on port %s' % port)
 
     def serve(self):
         while True:
@@ -690,7 +731,3 @@ class Server():
             print(req)
             response = 'HTTP/1.0 200 OK\n\nHello World'
             client_connection.sendall(response.encode())
-
-
-
-
