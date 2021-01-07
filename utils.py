@@ -666,11 +666,8 @@ class Client():
         self.npkts_now = 3
 
     def send_and_rcv(self):
-        ack = True
-        while ack: #self.npkts_now < self.npkts:
-            ack = self._send_req()
-            print(self.npkts_now)
-        print('here')
+        while self.npkts_now < self.npkts:
+            self._send_req()
         self._close()
 
     def _send_req(self):
@@ -678,7 +675,6 @@ class Client():
         pkt_delay = self.iats[idx]
         recv_buff = self.wsizes[idx]
         payload = self.payloads[idx]
-        print(pkt_delay, recv_buff, len(payload))
         self.npkts_now += 2
         t_now = time()
         if pkt_delay > t_now - self.last_time:
@@ -687,7 +683,6 @@ class Client():
         try:
             t_start_send = time()
             self.sckt.sendall(payload.encode('utf-8'))
-            print('sent: {0}'.format(len(payload)))
             t_sent = time() - t_start_send
             if self.debug:
                 print('PACKET SENT:')
@@ -705,7 +700,6 @@ class Client():
     def _recv_rpl(self):
         try:
             reply = self.sckt.recv(4096).decode('utf-8')
-            print('received: {0}'.format(len(reply)))
             if self.debug:
                 print('PACKET RECEIVED:')
                 print(reply)
@@ -729,7 +723,6 @@ class Server():
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((host, port))
         self.server_socket.listen()
-        print('Listening on port %s' % port)
 
     def threaded_client(self, connection):
         n = 3

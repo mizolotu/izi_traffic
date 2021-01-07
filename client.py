@@ -30,6 +30,7 @@ if __name__ == '__main__':
         tcp_gen_path, http_gen_path,
         tcp_meta['xmin'], tcp_meta['xmax'],
         http_meta['xmin'], http_meta['xmax'],
+        tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic]
     )
     client.connect()
     client.send_and_rcv()
