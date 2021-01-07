@@ -613,8 +613,9 @@ class Session():
 
 class Client():
 
-    def __init__(self, port, remote):
-        self.port = port
+    def __init__(self, sport, remote, dport):
+        self.sport = sport
+        self.dport = dport
         self.remote = remote
         self.last_time = time()
         self.npkts = 0
@@ -676,7 +677,8 @@ class Server():
     def serve(self):
         while True:
             client_connection, client_address = self.server_socket.accept()
-            client_connection.recv(4096)
+            req = client_connection.recv(4096)
+            print(req)
             response = 'HTTP/1.0 200 OK\n\nHello World'
             client_connection.sendall(response.encode())
 
