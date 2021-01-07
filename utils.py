@@ -16,6 +16,7 @@ def labeler(packet, label):
             bitlabel = 1
             pkt[IP].tos = pkt[IP].tos | bitlabel
             packet.set_payload(bytes(pkt))
+            print(pkt[IP].tos)
     packet.accept()
 
 def generate(interpreter, direction, flags):
