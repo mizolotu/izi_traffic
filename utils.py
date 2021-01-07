@@ -513,7 +513,8 @@ class Server_():
                         ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
                         send(ack)
                         tcp = TCP(sport=self.port, dport=client.port, flags="PA", seq=client.seq, ack=client.ack)
-                        send(ip / tcp)
+                        raw = '345'
+                        send(ip / tcp / raw)
                         client.npkts  += 3
                 else:
                     print(len(self.clients))
@@ -606,7 +607,10 @@ class Session():
         print('Connected')
 
     def _ack(self, p):
-        self.ack = p[TCP].seq + len(p[Raw])
+        if p.haslayer(Raw):
+            self.ack = p[TCP].seq + len(p[Raw])
+        else:
+            self.ack = p[TCP].seq
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
         send(ack)
 
