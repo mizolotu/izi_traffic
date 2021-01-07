@@ -5,6 +5,7 @@ import netifaces, socket
 from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MTU
 from threading import Thread
 from time import sleep, time
+from _thread import start_new_thread
 
 def generate(interpreter, direction):
     interpreter.allocate_tensors()
@@ -25,8 +26,8 @@ def restore_tcp(x, xmin, xmax):
     x = np.clip(x, xmin, xmax)
     p = x * (xmax - xmin)[None, :] + xmin[None, :]
     iats = p[:, 0] - xmin[0]
-    psizes = [int(item) for item in p[:, 1]]
-    wsizes = [int(item) for item in p[:, 2]]
+    psizes = [int(np.ceil(item)) for item in p[:, 1]]
+    wsizes = [int(np.ceil(item)) for item in p[:, 2]]
     return iats, psizes, wsizes
 
 def restore_http(x, xmin, xmax, psizes):
@@ -665,8 +666,9 @@ class Client():
         self.npkts_now = 3
 
     def send_and_rcv(self):
-        while self.npkts_now < self.npkts:
-            self._send_req()
+        ack = True
+        while ack: #self.npkts_now < self.npkts:
+            ack = self._send_req()
             print(self.npkts_now)
         print('here')
         self._close()
@@ -698,6 +700,7 @@ class Client():
         except Exception as e:
             print(e)
             ack = False
+        return ack
 
     def _recv_rpl(self):
         try:
@@ -728,17 +731,29 @@ class Server():
         self.server_socket.listen()
         print('Listening on port %s' % port)
 
+    def threaded_client(self, connection):
+        n = 3
+        connection.send(str.encode('Welcome to the Server\n'))
+        n += 2
+        while True:
+            data = connection.recv(2048)
+            reply = 'Server Says: ' + data.decode('utf-8')
+            n += 4
+            if not data or n > 100:
+                print(n)
+                break
+            connection.sendall(str.encode(reply))
+        connection.close()
+
     def serve(self):
+        ThreadCount = 0
         while True:
             try:
                 client_connection, client_address = self.server_socket.accept()
                 print(client_address)
-                req = client_connection.recv(4096)
-                print('received {0}'.format(len(req)))
-                response = 'asdasdsadasdasdsadasdasd'
+                start_new_thread(self.threaded_client, (client_connection,))
+                ThreadCount += 1
+                print('Thread Number: ' + str(ThreadCount))
 
-                a = client_connection.sendall(response.encode())
-                print(a)
-                print('sent {0}'.format(len(response)))
             except Exception as e:
                 print(e)
