@@ -8,7 +8,7 @@ from _thread import start_new_thread
 
 import numpy as np
 
-def generate(interpreter, direction):
+def generate(interpreter, direction, flags):
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
@@ -16,7 +16,8 @@ def generate(interpreter, direction):
     batchsize = input1_shape[0]
     input1 = np.array(np.random.randn(batchsize, input1_shape[1]), dtype=np.float32)
     direction = np.ones((batchsize, 1)) * np.array(direction)
-    input2 = np.array(np.hstack([direction, np.zeros((batchsize, 3)), np.ones((batchsize, 2)), np.zeros((batchsize, 3))]), dtype=np.float32)
+    flags = np.ones((batchsize, 1)) * np.array(flags)
+    input2 = np.array(np.hstack([direction, flags]), dtype=np.float32)
     interpreter.set_tensor(input_details[0]['index'], input1)
     interpreter.set_tensor(input_details[1]['index'], input2)
     interpreter.invoke()
@@ -646,8 +647,9 @@ class Client():
         tcp_x_max = np.array(tcp_x_max)
         http_x_min = np.array(http_x_min)
         http_x_max = np.array(http_x_max)
-        self.iats, self.psizes, self.wsizes = restore_tcp(generate(self.tcp_interpreter, [1, 0]), tcp_x_min, tcp_x_max)
-        self.payloads = restore_http(generate(self.http_interpreter, [1, 0]), http_x_min, http_x_max, self.psizes)
+        self.iats_psh, self.psizes_psh, self.wsizes_psh = restore_tcp(generate(self.tcp_interpreter, [1, 0], [0, 0, 0, 1, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.iats_ack, self.psizes_ack, self.wsizes_ack = restore_tcp(generate(self.tcp_interpreter, [1, 0], [0, 0, 0, 0, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.payloads = restore_http(generate(self.http_interpreter, [1, 0], [0, 0, 0, 1, 1, 0, 0, 0]), http_x_min, http_x_max, self.psizes_psh)
         self.npkts = np.minimum(np.random.randint(npkts_min, npkts_max), len(self.payloads))
 
     def connect(self):
@@ -672,8 +674,8 @@ class Client():
 
     def _send_req(self):
         idx = np.random.randint(0, len(self.iats))
-        pkt_delay = self.iats[idx]
-        recv_buff = self.wsizes[idx]
+        pkt_delay = self.iats_psh[idx]
+        recv_buff = self.wsizes_psh[idx]
         payload = self.payloads[idx]
         self.npkts_now += 2
         t_now = time()
@@ -700,6 +702,9 @@ class Client():
 
     def _recv_rpl(self):
         try:
+            idx = np.random.randint(0, len(self.iats_ack))
+            pkt_delay = self.iats_ack[idx]
+            sleep(pkt_delay)
             reply = self.sckt.recv(4096).decode('utf-8')
             if self.debug:
                 print('PACKET RECEIVED:')
@@ -728,14 +733,15 @@ class Server():
         tcp_x_max = np.array(tcp_x_max)
         http_x_min = np.array(http_x_min)
         http_x_max = np.array(http_x_max)
-        self.iats, self.psizes, self.wsizes = restore_tcp(generate(self.tcp_interpreter, [1, 0]), tcp_x_min, tcp_x_max)
-        self.payloads = restore_http(generate(self.http_interpreter, [1, 0]), http_x_min, http_x_max, self.psizes)
+        self.iats_psh, self.psizes_psh, self.wsizes_psh = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.iats_ack, self.psizes_ack, self.wsizes_ack = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 0, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.payloads = restore_http(generate(self.http_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), http_x_min, http_x_max, self.psizes_psh)
 
     def threaded_client(self, connection):
         last_time = time()
-        idx = np.random.randint(0, len(self.iats))
-        pkt_delay = self.iats[idx]
-        recv_buff = self.wsizes[idx]
+        idx = np.random.randint(0, len(self.iats_psh))
+        pkt_delay = self.iats_psh[idx]
+        recv_buff = self.wsizes_psh[idx]
         payload = self.payloads[idx]
         t_now = time()
         #if pkt_delay > t_now - last_time:
@@ -745,10 +751,13 @@ class Server():
         connection.send(payload.encode('utf-8'))
         last_time = time()
         while True:
+            idx = np.random.randint(0, len(self.iats_ack))
+            pkt_delay = self.iats_ack[idx]
+            sleep(pkt_delay)
             data = connection.recv(2048)
             idx = np.random.randint(0, len(self.iats))
-            pkt_delay = self.iats[idx]
-            recv_buff = self.wsizes[idx]
+            pkt_delay = self.iats_psh[idx]
+            recv_buff = self.wsizes_psh[idx]
             payload = self.payloads[idx]
             t_now = time()
             #if pkt_delay > t_now - last_time:
