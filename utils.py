@@ -455,7 +455,6 @@ class Connection():
         self.ack = seq + 1
         self.npkts = 1
         self.nmax = nmax
-        self.status = 'init'
         self.lasttime = time()
 
 class Server_():
@@ -478,14 +477,15 @@ class Server_():
     def listen(self, iface=None):
         if iface is None:
             iface = self.iface
-        sniff(prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port))
+        while True:
+            sniff(count=1, prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port))
 
     def process(self, pkt):
         if pkt.haslayer(TCP):
             src = pkt[IP].src
             sport = pkt[TCP].sport
             flags = pkt[TCP].flags
-            pkt.show()
+            print(src, sport, flags)
             if flags == 'S':
                 nmax = np.random.randint(self.nmin, self.nmax)
                 client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
@@ -497,16 +497,20 @@ class Server_():
                 client.connected = True
                 client.npkts += 2
                 self.clients.append(client)
-                print(client.status)
-            else:
+            elif flags == 'PA':
                 poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
                 if len(poitential_clients) == 1:
                     client = poitential_clients[0]
                     client.lasttime = time()
-                    if flags == 'A' and client.status == 'init':
-                        client.status = 'established'
-                print(client.status)
-
+                    ip = IP(src=self.ip, dst=client.ip)
+                    client.ack = pkt[TCP].seq + len(pkt[Raw])
+                    client.seq += 1
+                    ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+                    send(ack)
+                    tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack)
+                    ack = sr1(ip / tcp, timeout=self.timeout)
+                    client.npkts  += 4
+                    print(client.npkts)
 
     def _complete_handshake(self, pkt):
         if pkt.haslayer(TCP):
