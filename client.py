@@ -2,9 +2,7 @@ import argparse as arp
 import os.path as osp
 import json
 
-from utils import Client, labeler
-from netfilterqueue import NetfilterQueue
-from  threading import Thread
+from utils import Client
 
 if __name__ == '__main__':
 
@@ -25,12 +23,6 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--nflows', help='Number of flows', default=None, type=int)
     args = parser.parse_args()
 
-    packet_labeler = lambda x: labeler(x, args.traffic)
-    nfqueue = NetfilterQueue()
-    nfqueue.bind(0, packet_labeler)
-    thr = Thread(target=nfqueue.run, daemon=True)
-    thr.start()
-
     tcp_gen_path = osp.join(tcp_gen_dir, '{0}.tflite'.format(args.traffic))
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
@@ -44,7 +36,7 @@ if __name__ == '__main__':
             tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic]
         )
         client.connect()
-        client.send_and_rcv()
+        #client.send_and_rcv()
         flow_count += 1
         if args.nflows is not None and flow_count >= args.nflows:
             break

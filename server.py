@@ -2,7 +2,7 @@ import argparse as arp
 import os.path as osp
 import json
 
-from utils import Server
+from utils import Server_
 
 if __name__ == '__main__':
 
@@ -23,7 +23,9 @@ if __name__ == '__main__':
     tcp_gen_path = osp.join(tcp_gen_dir, '{0}.tflite'.format(args.traffic))
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
-    server = Server(args.port, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
-    server.serve()
+    #server = Server(args.port, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
+    server = Server_(args.iface, args.port, tcp_gen_path, http_gen_path)
+    #server.serve()
+    server.listen()
 
 

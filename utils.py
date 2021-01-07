@@ -8,17 +8,6 @@ from _thread import start_new_thread
 
 import numpy as np
 
-def labeler(packet, label):
-    pkt = IP(packet.get_payload())
-    idx = int(label.split('_')[1])
-    if pkt.haslayer(TCP):
-        if idx > 0:
-            bitlabel = 1
-            pkt[IP].tos = 0x01
-            #pkt[IP].tos = pkt[IP].tos | bitlabel
-            packet.set_payload(bytes(pkt))
-    packet.accept()
-
 def generate(interpreter, direction, flags):
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
@@ -457,16 +446,17 @@ class Flow():
             self.idl_min  # 72
         ])
 
-class Client_():
+class Connection():
 
     def __init__(self, ip, port, seq, nmax):
         self.ip = ip
         self.port = port
         self.seq = seq
         self.ack = seq + 1
-        self.connected = False
         self.npkts = 1
         self.nmax = nmax
+        self.status = 'init'
+        self.lasttime = time()
 
 class Server_():
 
@@ -492,9 +482,13 @@ class Server_():
 
     def process(self, pkt):
         if pkt.haslayer(TCP):
-            if pkt[TCP].flags == 'S':
+            src = pkt[IP].src
+            sport = pkt[TCP].sport
+            flags = pkt[TCP].flags
+            pkt.show()
+            if flags == 'S':
                 nmax = np.random.randint(self.nmin, self.nmax)
-                client = Client(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
+                client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
                 print('New client')
                 print(client.ip, client.port)
                 ip = IP(src=self.ip, dst=client.ip)
@@ -503,7 +497,16 @@ class Server_():
                 client.connected = True
                 client.npkts += 2
                 self.clients.append(client)
-                self._create_connection(client)
+                print(client.status)
+            else:
+                poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
+                if len(poitential_clients) == 1:
+                    client = poitential_clients[0]
+                    client.lasttime = time()
+                    if flags == 'A' and client.status == 'init':
+                        client.status = 'established'
+                print(client.status)
+
 
     def _complete_handshake(self, pkt):
         if pkt.haslayer(TCP):
