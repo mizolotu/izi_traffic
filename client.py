@@ -44,4 +44,4 @@ if __name__ == '__main__':
     label = int(args.traffic.split('_')[1])
     session = Session(args.iface, args.remote, args.dport, label, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
     session.connect()
-    session.send('123')
+    session.send()

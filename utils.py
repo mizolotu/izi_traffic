@@ -650,7 +650,6 @@ class Session():
         s = L3RawSocket()
         while self.connected:
             p = s.recv(MTU)
-            p.show()
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
                 self._ack(p)
                 self.send()
