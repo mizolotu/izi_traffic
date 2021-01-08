@@ -2,7 +2,7 @@ import argparse as arp
 import os.path as osp
 import json
 
-from utils import Client, Session
+from utils import Session
 
 if __name__ == '__main__':
 
