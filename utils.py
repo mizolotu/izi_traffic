@@ -653,7 +653,7 @@ class Session():
         window = self.wsizes_ack[idx]
         fin_ack = IP(src=self.host, dst=self.remote, tos=p[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack, window=window)
         sleep(pkt_delay)
-        sr1(fin_ack, timeout=self.timeout)
+        sr1(fin_ack, timeout=self.timeout, verbose=0)
         self.seq += 1
 
     def _sniff(self):
