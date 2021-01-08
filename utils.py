@@ -471,8 +471,6 @@ class Server():
         self.nmin, self.nmax = nmin, nmax
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         tcp_x_min = np.array(tcp_x_min)
         tcp_x_max = np.array(tcp_x_max)
         http_x_min = np.array(http_x_min)
@@ -494,92 +492,150 @@ class Server():
             tos = pkt[IP].tos
             if flags == 'S':
                 nmax = np.random.randint(self.nmin, self.nmax)
-                poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
-                if len(poitential_clients) == 0:
+                potential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
+                if len(potential_clients) == 0:
                     client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
+
+                    idx = np.random.randint(0, len(self.iats_ack))
+                    pkt_delay = self.iats_ack[idx]
+                    window = self.wsizes_ack[idx]
                     ip = IP(src=self.ip, dst=client.ip, tos=tos|self.label)
-                    tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
+                    tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)], window=window)
+                    sleep(pkt_delay)
                     send(ip / tcp)
+
                     client.status = 'syn-ack'
                     client.npkts += 1
                     self.clients.append(client)
             else:
-                poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
-                if len(poitential_clients) == 1:
-                    client = poitential_clients[0]
+                potential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
+                if len(potential_clients) == 1:
+
+                    client = potential_clients[0]
+                    ip = IP(src=self.ip, dst=client.ip, tos=tos | self.label)
                     client.lasttime = time()
+
                     if flags == 'A':
                         client.seq = pkt[TCP].ack
                         if client.status == 'syn-ack':
+
                             client.status = 'established'
                             client.npkts += 1
+
                         elif client.status == 'established':
                             if client.npkts >= client.nmax:
-                                print(client.npkts)
-                                ip = IP(src=self.ip, dst=client.ip)
-                                tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack)
+
+                                idx = np.random.randint(0, len(self.iats_psh))
+                                pkt_delay = self.iats_ack[idx]
+                                window = self.wsizes_ack[idx]
+                                tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack, window=window)
+                                sleep(pkt_delay)
                                 send(ip/tcp)
+
                                 client.seq += 1
                                 client.status = 'close-wait'
                                 client.npkts += 2
+
                         elif client.status == 'close-wait':
+
                             client.status = 'closed'
                             client.npkts += 1
+
                     elif flags == 'PA':
-                        ip = IP(src=self.ip, dst=client.ip)
+
                         client.ack = pkt[TCP].seq + len(pkt[Raw])
-                        ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+                        idx = np.random.randint(0, len(self.iats_psh))
+                        pkt_delay = self.iats_ack[idx]
+                        window = self.wsizes_ack[idx]
+                        ack = ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack, window=window)
+                        sleep(pkt_delay)
                         send(ack)
-                        tcp = TCP(sport=self.port, dport=client.port, flags="PA", seq=client.seq, ack=client.ack)
-                        raw = '34567789'
+
+                        idx = np.random.randint(0, len(self.iats_psh))
+                        pkt_delay = self.iats_psh[idx]
+                        window = self.wsizes_psh[idx]
+                        raw = self.payloads[idx]
+                        tcp = TCP(sport=self.port, dport=client.port, flags="PA", seq=client.seq, ack=client.ack, window=window)
+                        sleep(pkt_delay)
                         send(ip/tcp/raw)
                         client.npkts  += 3
+
                     elif flags == 'FA':
                         if client.status == 'close-wait':
+
                             client.status = 'closed'
                             client.ack = pkt[TCP].seq + 1
-                            ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+                            idx = np.random.randint(0, len(self.iats_psh))
+                            pkt_delay = self.iats_ack[idx]
+                            window = self.wsizes_ack[idx]
+                            ack = ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack, window=window)
+                            sleep(pkt_delay)
                             send(ack)
                             client.npkts += 2
+                            self.clients.remove(client)
+
                         elif client.status == 'established':
-                            ip = IP(src=self.ip, dst=client.ip)
-                            tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack)
+
+                            idx = np.random.randint(0, len(self.iats_psh))
+                            pkt_delay = self.iats_ack[idx]
+                            window = self.wsizes_ack[idx]
+                            tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack, window=window)
+                            sleep(pkt_delay)
                             send(ip / tcp)
                             client.status = 'close-wait'
                             client.npkts += 2
 
 class Session():
 
-    def __init__(self, iface, sport, remote, dport, tcp_gen_path, http_gen_path, timeout=3):
+    def __init__(self, iface, sport, remote, dport, label, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=3):
         self.host = netifaces.ifaddresses(iface)[2][0]['addr']
         self.sport = sport
         self.remote = remote
         self.dport = dport
-        self.ip = IP(src=self.host, dst=remote)
+        self.label = 1 if label > 0 else 0
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
+        tcp_x_min = np.array(tcp_x_min)
+        tcp_x_max = np.array(tcp_x_max)
+        http_x_min = np.array(http_x_min)
+        http_x_max = np.array(http_x_max)
+        self.iats_psh, self.psizes_psh, self.wsizes_psh = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.iats_ack, self.psizes_ack, self.wsizes_ack = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 0, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.payloads = restore_http(generate(self.http_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), http_x_min, http_x_max, self.psizes_psh)
         self.timeout = timeout
 
     def connect(self):
         self.seq = np.random.randint(0, (2 ** 32) - 1)
-        syn = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
+        syn = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
         syn_ack = sr1(syn, timeout=self.timeout)
         self.seq += 1
         self.ack = syn_ack[TCP].seq + 1
-        ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
+        idx = np.random.randint(0, len(self.iats_ack))
+        pkt_delay = self.iats_ack[idx]
+        window = self.wsizes_ack[idx]
+        ack = IP(src=self.host, dst=self.remote, tos=syn_ack[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
+        sleep(pkt_delay)
         send(ack)
         self.connected = True
-        self._start_ackThread()
+        self._start_ack_thread()
 
     def _ack(self, p):
         self.ack = p[TCP].seq + len(p[Raw])
-        ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
+        idx = np.random.randint(0, len(self.iats_ack))
+        pkt_delay = self.iats_ack[idx]
+        window = self.wsizes_ack[idx]
+        ack = IP(src=self.host, dst=self.remote, tos=p[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
+        sleep(pkt_delay)
         send(ack)
 
     def _ack_rclose(self):
         self.connected = False
         self.ack += 1
-        fin_ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
+        idx = np.random.randint(0, len(self.iats_ack))
+        pkt_delay = self.iats_ack[idx]
+        window = self.wsizes_ack[idx]
+        fin_ack = IP(src=self.host, dst=self.remote, tos=p[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack, window=window)
+        sleep(pkt_delay)
         sr1(fin_ack, timeout=self.timeout)
         self.seq += 1
 
@@ -590,32 +646,47 @@ class Session():
             p.show()
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
                 self._ack(p)
-                self.send('payload')
+                self.send()
             elif p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
                 self._ack_rclose()
         s.close()
         self._ackThread = None
 
-    def _start_ackThread(self):
-        self._ackThread = Thread(name='AckThread', target=self._sniff)
+    def _start_ack_thread(self):
+        self._ackThread = Thread(name='ack_thread', target=self._sniff)
         self._ackThread.start()
 
     def close(self):
+
         self.connected = False
-        fin = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
+        idx = np.random.randint(0, len(self.iats_ack))
+        pkt_delay = self.iats_ack[idx]
+        window = self.wsizes_ack[idx]
+        fin = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack, window=window)
+        sleep(pkt_delay)
         fin_ack = sr1(fin, timeout=self.timeout)
+
         self.seq += 1
         self.ack = fin_ack[TCP].seq + 1
-        ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
+        idx = np.random.randint(0, len(self.iats_ack))
+        pkt_delay = self.iats_ack[idx]
+        window = self.wsizes_ack[idx]
+        ack = IP(src=self.host, dst=self.remote, tos=fin_ack[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
+        sleep(pkt_delay)
         send(ack)
 
-    def build(self, payload):
-        psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / payload
+    def build(self, payload, window):
+        psh = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack, window=window) / payload
         self.seq += len(psh[Raw])
         return psh
 
-    def send(self, payload):
-        psh = self.build(payload)
+    def send(self):
+        idx = np.random.randint(0, len(self.iats_psh))
+        pkt_delay = self.iats_psh[idx]
+        window = self.wsizes_psh[idx]
+        raw = self.payloads[idx]
+        psh = self.build(raw, window)
+        sleep(pkt_delay)
         sr1(psh, timeout=self.timeout)
 
 class SocketClient():
