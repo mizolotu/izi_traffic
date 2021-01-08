@@ -41,8 +41,8 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--remote', help='Remote', default='172.17.0.1')
     parser.add_argument('-d', '--dport', help='Destination port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
-    parser.add_argument('-f', '--flows', help='Number of flows', default=1, type=int)
-    parser.add_argument('-n', '--nthreads', help='Number of flows', default=0, type=int)
+    parser.add_argument('-f', '--flows', help='Number of flows', default=0, type=int)
+    parser.add_argument('-n', '--nthreads', help='Number of flows', default=1, type=int)
     args = parser.parse_args()
 
     label = int(args.traffic.split('_')[1])
