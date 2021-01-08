@@ -460,7 +460,8 @@ class Connection():
 
 class Server():
 
-    def __init__(self, iface, port, label, tcp_gen_path, http_gen_path, nmin, nmax, tcp_x_min, tcp_x_max, http_x_min, http_x_max):
+    def __init__(self, iface, port, label, tcp_gen_path, http_gen_path, nmin, nmax, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=30):
+        self.timeout = timeout
         self.iface = iface
         self.ip = netifaces.ifaddresses(iface)[2][0]['addr']
         self.port = port
@@ -478,6 +479,15 @@ class Server():
         self.iats_psh, self.psizes_psh, self.wsizes_psh = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
         self.iats_ack, self.psizes_ack, self.wsizes_ack = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 0, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
         self.payloads = restore_http(generate(self.http_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), http_x_min, http_x_max, self.psizes_psh)
+        clean_thr = Thread(target=self.clean_connections, daemon=True)
+        clean_thr.start()
+
+    def clean_connections(self, sleep_interval=1):
+        while True:
+            for conn in self.clients:
+                if time() - conn.lasttime > self.timeout:
+                    self.clients.remove(conn)
+            sleep(sleep_interval)
 
     def listen(self, iface=None):
         if iface is None:
@@ -502,7 +512,7 @@ class Server():
                     ip = IP(src=self.ip, dst=client.ip, tos=tos|self.label)
                     tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)], window=window)
                     sleep(pkt_delay)
-                    send(ip / tcp)
+                    send(ip / tcp, verbose=0)
 
                     client.status = 'syn-ack'
                     client.npkts += 1
@@ -530,7 +540,7 @@ class Server():
                                 window = self.wsizes_ack[idx]
                                 tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack, window=window)
                                 sleep(pkt_delay)
-                                send(ip/tcp)
+                                send(ip/tcp, verbose=0)
 
                                 client.seq += 1
                                 client.status = 'close-wait'
@@ -549,7 +559,7 @@ class Server():
                         window = self.wsizes_ack[idx]
                         ack = ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack, window=window)
                         sleep(pkt_delay)
-                        send(ack)
+                        send(ack, verbose=0)
 
                         idx = np.random.randint(0, len(self.iats_psh))
                         pkt_delay = self.iats_psh[idx]
@@ -557,7 +567,7 @@ class Server():
                         raw = self.payloads[idx]
                         tcp = TCP(sport=self.port, dport=client.port, flags="PA", seq=client.seq, ack=client.ack, window=window)
                         sleep(pkt_delay)
-                        send(ip/tcp/raw)
+                        send(ip/tcp/raw, verbose=0)
                         client.npkts  += 3
 
                     elif flags == 'FA':
@@ -570,7 +580,7 @@ class Server():
                             window = self.wsizes_ack[idx]
                             ack = ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack, window=window)
                             sleep(pkt_delay)
-                            send(ack)
+                            send(ack, verbose=0)
                             client.npkts += 2
                             self.clients.remove(client)
 
@@ -581,7 +591,7 @@ class Server():
                             window = self.wsizes_ack[idx]
                             tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack, window=window)
                             sleep(pkt_delay)
-                            send(ip / tcp)
+                            send(ip / tcp, verbose=0)
                             client.status = 'close-wait'
                             client.npkts += 2
 
@@ -614,7 +624,7 @@ class Session():
     def connect(self):
         self.seq = np.random.randint(0, (2 ** 32) - 1)
         syn = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
-        syn_ack = sr1(syn, timeout=self.timeout)
+        syn_ack = sr1(syn, timeout=self.timeout, verbose=0)
         self.seq += 1
         self.ack = syn_ack[TCP].seq + 1
         idx = np.random.randint(0, len(self.iats_ack))
@@ -622,7 +632,7 @@ class Session():
         window = self.wsizes_ack[idx]
         ack = IP(src=self.host, dst=self.remote, tos=syn_ack[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
         sleep(pkt_delay)
-        send(ack)
+        send(ack, verbose=0)
         self.connected = True
         self._start_ack_thread()
 
@@ -633,7 +643,7 @@ class Session():
         window = self.wsizes_ack[idx]
         ack = IP(src=self.host, dst=self.remote, tos=p[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
         sleep(pkt_delay)
-        send(ack)
+        send(ack, verbose=0)
 
     def _ack_rclose(self):
         self.connected = False
@@ -670,7 +680,7 @@ class Session():
         window = self.wsizes_ack[idx]
         fin = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack, window=window)
         sleep(pkt_delay)
-        fin_ack = sr1(fin, timeout=self.timeout)
+        fin_ack = sr1(fin, timeout=self.timeout, verbose=0)
 
         self.seq += 1
         self.ack = fin_ack[TCP].seq + 1
@@ -679,7 +689,7 @@ class Session():
         window = self.wsizes_ack[idx]
         ack = IP(src=self.host, dst=self.remote, tos=fin_ack[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
         sleep(pkt_delay)
-        send(ack)
+        send(ack, verbose=0)
 
     def build(self, payload, window):
         psh = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack, window=window) / payload
@@ -693,7 +703,7 @@ class Session():
         raw = self.payloads[idx]
         psh = self.build(raw, window)
         sleep(pkt_delay)
-        sr1(psh, timeout=self.timeout)
+        sr1(psh, timeout=self.timeout, verbose=0)
 
 class SocketClient():
 
