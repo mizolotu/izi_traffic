@@ -626,19 +626,22 @@ class Session():
         return port
 
     def connect(self):
-        self.seq = np.random.randint(0, (2 ** 32) - 1)
-        syn = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
-        syn_ack = sr1(syn, timeout=self.timeout, verbose=0)
-        self.seq += 1
-        self.ack = syn_ack[TCP].seq + 1
-        idx = np.random.randint(0, len(self.iats_ack))
-        pkt_delay = self.iats_ack[idx]
-        window = self.wsizes_ack[idx]
-        ack = IP(src=self.host, dst=self.remote, tos=syn_ack[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
-        sleep(pkt_delay)
-        send(ack, verbose=0)
-        self.connected = True
-        self._start_ack_thread()
+        try:
+            self.seq = np.random.randint(0, (2 ** 32) - 1)
+            syn = IP(src=self.host, dst=self.remote, tos=self.label) / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
+            syn_ack = sr1(syn, timeout=self.timeout, verbose=0)
+            self.seq += 1
+            self.ack = syn_ack[TCP].seq + 1
+            idx = np.random.randint(0, len(self.iats_ack))
+            pkt_delay = self.iats_ack[idx]
+            window = self.wsizes_ack[idx]
+            ack = IP(src=self.host, dst=self.remote, tos=syn_ack[IP].tos|self.label) / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack, window=window)
+            sleep(pkt_delay)
+            send(ack, verbose=0)
+            self.connected = True
+            self._start_ack_thread()
+        except:
+            pass
 
     def _ack(self, p):
         self.ack = p[TCP].seq + len(p[Raw])
