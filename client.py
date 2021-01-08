@@ -12,7 +12,7 @@ def session_after_session(sleep_interval=1):
     session.send()
     flow_count = 1
     while True:
-        if flow_count >= args.flows:
+        if args.flows > 0 and flow_count >= args.flows:
             break
         if session.connected:
             sleep(sleep_interval)
@@ -21,6 +21,8 @@ def session_after_session(sleep_interval=1):
             session.connect()
             session.send()
             flow_count += 1
+            if args.flows > 0:
+                print(flow_count)
 
 
 if __name__ == '__main__':
@@ -40,7 +42,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dport', help='Destination port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
     parser.add_argument('-f', '--flows', help='Number of flows', default=1, type=int)
-    parser.add_argument('-n', '--nthreads', help='Number of flows', default=1, type=int)
+    parser.add_argument('-n', '--nthreads', help='Number of flows', default=0, type=int)
     args = parser.parse_args()
 
     label = int(args.traffic.split('_')[1])
