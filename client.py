@@ -41,6 +41,7 @@ if __name__ == '__main__':
     #    if args.nflows is not None and flow_count >= args.nflows:
     #        break
 
-    session = Session(args.iface, args.sport, args.remote, args.dport, tcp_gen_path, http_gen_path)
+    label = int(args.traffic.split('_')[1])
+    session = Session(args.iface, args.sport, args.remote, args.dport, label, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
     session.connect()
     session.send('123')
