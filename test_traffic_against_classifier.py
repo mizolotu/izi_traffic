@@ -45,7 +45,7 @@ if __name__ == '__main__':
 
     # fpath
 
-    fpaths_star = [osp.join(fpath, '701_80*') for fpath in fpaths]
+    fpaths_star = [osp.join(fpath, '701_*') for fpath in fpaths]
     #fpaths_star = [osp.join(fpath, '*_test') for fpath in fpaths]
 
     # meta
@@ -100,7 +100,7 @@ if __name__ == '__main__':
             n_incorrect += 1
         #print('Accuracy = {0}'.format(n_correct / (n_correct + n_incorrect)))
         count += 1
-        if count >= 100:
+        if count >= 10000:
             break
     sk_auc = roc_auc_score(testy, probs)
     print(sk_auc)
