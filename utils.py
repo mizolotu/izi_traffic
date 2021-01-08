@@ -587,9 +587,9 @@ class Server():
 
 class Session():
 
-    def __init__(self, iface, sport, remote, dport, label, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=3):
+    def __init__(self, iface, remote, dport, label, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=3):
         self.host = netifaces.ifaddresses(iface)[2][0]['addr']
-        self.sport = sport
+        self.sport = self._get_free_port()
         self.remote = remote
         self.dport = dport
         self.label = 1 if label > 0 else 0
@@ -603,6 +603,13 @@ class Session():
         self.iats_ack, self.psizes_ack, self.wsizes_ack = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 0, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
         self.payloads = restore_http(generate(self.http_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), http_x_min, http_x_max, self.psizes_psh)
         self.timeout = timeout
+
+    def _get_free_port(self):
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp.bind(('', 0))
+        addr, port = tcp.getsockname()
+        tcp.close()
+        return port
 
     def connect(self):
         self.seq = np.random.randint(0, (2 ** 32) - 1)
