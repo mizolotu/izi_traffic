@@ -5,6 +5,8 @@ import os.path as osp
 from utils import *
 from tf_utils import *
 from time import time
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
 
 import tflite_runtime.interpreter as tflite
 
@@ -78,28 +80,28 @@ if __name__ == '__main__':
     input1_shape = input_details[0]['shape']
     n_correct = 0
     n_incorrect = 0
+    count = 0
+    probs = []
+    testy = []
     for x,y in batches:
         interpreter.set_tensor(input_details[0]['index'], x)
         interpreter.invoke()
         p = interpreter.get_tensor(output_details[0]['index'])[0][0]
+        probs.append(p)
         l = np.array(y)[0]
-        print(p, l)
-        if 0: #l == 1:
-            arr = np.array(x)[0]
-            for i, item in enumerate(arr):
-                print(i + 1, item)
-            break
+        testy.append(l)
         if p < 0.98976469039917:
             p = 0
         else:
             p = 1
         if p == l:
             n_correct += 1
-            if 0: #p == 1:
-                arr = np.array(x)[0]
-                for i, item in enumerate(arr):
-                    print(i+1, item)
-                break
         else:
             n_incorrect += 1
         #print('Accuracy = {0}'.format(n_correct / (n_correct + n_incorrect)))
+        count += 1
+        if count >= 100:
+            break
+    sk_auc = roc_auc_score(testy, probs)
+    print(sk_auc)
+

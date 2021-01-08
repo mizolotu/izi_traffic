@@ -1,12 +1,12 @@
+import subprocess
 import tflite_runtime.interpreter as tflite
 import netifaces, socket
+import numpy as np
 
 from scapy.all import sniff, IP, TCP, RandShort, send, sr1, Raw, L3RawSocket, MTU
 from threading import Thread
 from time import sleep, time
 from _thread import start_new_thread
-
-import numpy as np
 
 def generate(interpreter, direction, flags):
     interpreter.allocate_tensors()
@@ -460,7 +460,8 @@ class Connection():
 
 class Server():
 
-    def __init__(self, iface, port, label, tcp_gen_path, http_gen_path, nmin, nmax, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=30):
+    def __init__(self, iface, port, label, tcp_gen_path, http_gen_path, nmin, nmax, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=30, debug=False):
+        self.debug = debug
         self.timeout = timeout
         self.iface = iface
         self.ip = netifaces.ifaddresses(iface)[2][0]['addr']
@@ -484,9 +485,13 @@ class Server():
 
     def clean_connections(self, sleep_interval=1):
         while True:
-            for conn in self.clients:
+            for i, conn in enumerate(self.clients):
                 if time() - conn.lasttime > self.timeout:
                     self.clients.remove(conn)
+            if self.debug:
+                subprocess.call('clear')
+                for i, conn in enumerate(self.clients):
+                    print('Client {0}: {1}/{2}'.format(i, conn.npkts, conn.nmax))
             sleep(sleep_interval)
 
     def listen(self, iface=None):
@@ -506,7 +511,6 @@ class Server():
                 potential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
                 if len(potential_clients) == 0:
                     client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
-
                     idx = np.random.randint(0, len(self.iats_ack))
                     pkt_delay = self.iats_ack[idx]
                     window = self.wsizes_ack[idx]
@@ -514,7 +518,6 @@ class Server():
                     tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)], window=window)
                     sleep(pkt_delay)
                     send(ip / tcp, verbose=0)
-
                     client.status = 'syn-ack'
                     client.npkts += 1
                     self.clients.append(client)
@@ -598,7 +601,7 @@ class Server():
 
 class Session():
 
-    def __init__(self, iface, remote, dport, label, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=3):
+    def __init__(self, iface, remote, dport, label, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, timeout=30):
         self.host = netifaces.ifaddresses(iface)[2][0]['addr']
         self.sport = self._get_free_port()
         self.remote = remote
