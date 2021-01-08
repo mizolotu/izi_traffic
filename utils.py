@@ -645,7 +645,7 @@ class Session():
         sleep(pkt_delay)
         send(ack, verbose=0)
 
-    def _ack_rclose(self):
+    def _ack_rclose(self, p):
         self.connected = False
         self.ack += 1
         idx = np.random.randint(0, len(self.iats_ack))
@@ -664,7 +664,7 @@ class Session():
                 self._ack(p)
                 self.send()
             elif p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
-                self._ack_rclose()
+                self._ack_rclose(p)
         s.close()
         self._ackThread = None
 
