@@ -23,25 +23,24 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--nflows', help='Number of flows', default=None, type=int)
     args = parser.parse_args()
 
+    label = int(args.traffic.split('_')[1])
     tcp_gen_path = osp.join(tcp_gen_dir, '{0}.tflite'.format(args.traffic))
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
-    #flow_count = 0
-    #while True:
-    #    client = Client(
-    #        args.sport, args.remote, args.dport,
-    #        tcp_gen_path, http_gen_path,
-    #        tcp_meta['xmin'], tcp_meta['xmax'],
-    #        http_meta['xmin'], http_meta['xmax'],
-    #        tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic]
-    #    )
+    flow_count = 0
+    while True:
+
+        session = Session(args.iface, args.remote, args.dport, label, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
+        session.connect()
+        session.send()
+
+    #    client = Client(args.sport, args.remote, args.dport, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'], tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic])
     #    client.connect()
     #    client.send_and_rcv()
-    #    flow_count += 1
-    #    if args.nflows is not None and flow_count >= args.nflows:
-    #        break
 
-    label = int(args.traffic.split('_')[1])
-    session = Session(args.iface, args.remote, args.dport, label, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
-    session.connect()
-    session.send()
+        flow_count += 1
+        if args.nflows is not None and flow_count >= args.nflows:
+            break
+
+
+
