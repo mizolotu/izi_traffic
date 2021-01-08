@@ -83,6 +83,7 @@ if __name__ == '__main__':
         interpreter.invoke()
         p = interpreter.get_tensor(output_details[0]['index'])[0][0]
         l = np.array(y)[0]
+        print(p, l)
         if 0: #l == 1:
             arr = np.array(x)[0]
             for i, item in enumerate(arr):
@@ -101,4 +102,4 @@ if __name__ == '__main__':
                 break
         else:
             n_incorrect += 1
-        print('Accuracy = {0}'.format(n_correct / (n_correct + n_incorrect)))
+        #print('Accuracy = {0}'.format(n_correct / (n_correct + n_incorrect)))

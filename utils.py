@@ -502,6 +502,7 @@ class Server():
             tos = pkt[IP].tos
             if flags == 'S':
                 nmax = np.random.randint(self.nmin, self.nmax)
+                nmax = np.minimum(nmax, len(self.iats_ack) + len(self.iats_psh))
                 potential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
                 if len(potential_clients) == 0:
                     client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
