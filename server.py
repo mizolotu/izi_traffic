@@ -18,6 +18,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--iface', help='Interface', default='eth0')
     parser.add_argument('-p', '--port', help='Port', default=80, type=int)
     parser.add_argument('-t', '--traffic', help='Traffic', default='80_0')
+    parser.add_argument('-d', '--debug', help='Debug mode', default='False', type=bool)
     args = parser.parse_args()
 
     label = int(args.traffic.split('_')[1])
@@ -25,7 +26,7 @@ if __name__ == '__main__':
     http_gen_path = osp.join(http_gen_dir, '{0}.tflite'.format(args.traffic))
 
     #server = Server(args.port, tcp_gen_path, http_gen_path, tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
-    server = Server(args.iface, args.port, label, tcp_gen_path, http_gen_path, tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic], tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'])
+    server = Server(args.iface, args.port, label, tcp_gen_path, http_gen_path, tcp_meta['nmin'][args.traffic], tcp_meta['nmax'][args.traffic], tcp_meta['xmin'], tcp_meta['xmax'], http_meta['xmin'], http_meta['xmax'], debug=args.debug)
     #server.serve()
     server.listen()
 
