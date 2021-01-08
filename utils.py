@@ -570,7 +570,6 @@ class Session():
         send(ack)
         self.connected = True
         self._start_ackThread()
-        print('Connected')
 
     def _ack(self, p):
         self.ack = p[TCP].seq + len(p[Raw])
@@ -591,7 +590,7 @@ class Session():
             p.show()
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
                 self._ack(p)
-                send('payload')
+                self.send('payload')
             elif p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
                 self._ack_rclose()
         s.close()
@@ -618,7 +617,6 @@ class Session():
     def send(self, payload):
         psh = self.build(payload)
         sr1(psh, timeout=self.timeout)
-
 
 class SocketClient():
 
