@@ -458,129 +458,95 @@ class Connection():
         self.lasttime = time()
         self.status = 'syn'
 
-class Server_():
+class Server():
 
-    def __init__(self, iface, port, tcp_gen_path, http_gen_path, nmin=10, nmax=15, timeout=3):
+    def __init__(self, iface, port, label, tcp_gen_path, http_gen_path, nmin, nmax, tcp_x_min, tcp_x_max, http_x_min, http_x_max):
         self.iface = iface
         self.ip = netifaces.ifaddresses(iface)[2][0]['addr']
         self.port = port
+        self.label = 1 if label > 0 else 0
         self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
         self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
         self.clients = []
-        self.timeout = timeout
         self.nmin, self.nmax = nmin, nmax
-
-    def listen_(self, iface=None):
-        if iface is None:
-            iface = self.iface
-        sniff(prn=self._complete_handshake, iface=iface, filter='dst {0} and dst port {1} and tcp[tcpflags] == tcp-syn'.format(self.ip, self.port))
+        self.tcp_interpreter = tflite.Interpreter(model_path=tcp_gen_path)
+        self.http_interpreter = tflite.Interpreter(model_path=http_gen_path)
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        tcp_x_min = np.array(tcp_x_min)
+        tcp_x_max = np.array(tcp_x_max)
+        http_x_min = np.array(http_x_min)
+        http_x_max = np.array(http_x_max)
+        self.iats_psh, self.psizes_psh, self.wsizes_psh = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.iats_ack, self.psizes_ack, self.wsizes_ack = restore_tcp(generate(self.tcp_interpreter, [0, 1], [0, 0, 0, 0, 1, 0, 0, 0]), tcp_x_min, tcp_x_max)
+        self.payloads = restore_http(generate(self.http_interpreter, [0, 1], [0, 0, 0, 1, 1, 0, 0, 0]), http_x_min, http_x_max, self.psizes_psh)
 
     def listen(self, iface=None):
         if iface is None:
             iface = self.iface
-        while True:
-            sniff(prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port), store=True)
+        sniff(prn=self.process, iface=iface, filter='dst {0} and dst port {1}'.format(self.ip, self.port), store=True)
 
     def process(self, pkt):
         if pkt.haslayer(TCP):
             src = pkt[IP].src
             sport = pkt[TCP].sport
             flags = pkt[TCP].flags
-            print(src, sport, flags)
+            tos = pkt[IP].tos
             if flags == 'S':
                 nmax = np.random.randint(self.nmin, self.nmax)
-                client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
-                print('New client: {0}:{1}'.format(client.ip, client.port))
-                ip = IP(src=self.ip, dst=client.ip)
-                tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
-                send(ip / tcp)
-                client.status = 'syn-ack'
-                client.npkts += 1
-                self.clients.append(client)
+                poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
+                if len(poitential_clients) == 0:
+                    client = Connection(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
+                    ip = IP(src=self.ip, dst=client.ip, tos=tos|self.label)
+                    tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
+                    send(ip / tcp)
+                    client.status = 'syn-ack'
+                    client.npkts += 1
+                    self.clients.append(client)
             else:
                 poitential_clients = [client for client in self.clients if client.ip == src and client.port == sport]
                 if len(poitential_clients) == 1:
                     client = poitential_clients[0]
                     client.lasttime = time()
                     if flags == 'A':
+                        client.seq = pkt[TCP].ack
                         if client.status == 'syn-ack':
                             client.status = 'established'
-                        client.npkts += 1
+                            client.npkts += 1
+                        elif client.status == 'established':
+                            if client.npkts >= client.nmax:
+                                print(client.npkts)
+                                ip = IP(src=self.ip, dst=client.ip)
+                                tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack)
+                                send(ip/tcp)
+                                client.seq += 1
+                                client.status = 'close-wait'
+                                client.npkts += 2
+                        elif client.status == 'close-wait':
+                            client.status = 'closed'
+                            client.npkts += 1
                     elif flags == 'PA':
                         ip = IP(src=self.ip, dst=client.ip)
                         client.ack = pkt[TCP].seq + len(pkt[Raw])
-                        client.seq += 1
                         ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
                         send(ack)
                         tcp = TCP(sport=self.port, dport=client.port, flags="PA", seq=client.seq, ack=client.ack)
-                        raw = '345'
-                        send(ip / tcp / raw)
+                        raw = '34567789'
+                        send(ip/tcp/raw)
                         client.npkts  += 3
-                else:
-                    print(len(self.clients))
-
-    def _complete_handshake(self, pkt):
-        if pkt.haslayer(TCP):
-            nmax = np.random.randint(self.nmin, self.nmax)
-            client = Client(pkt[IP].src, pkt[TCP].sport, pkt.seq, nmax)
-            print('New client')
-            print(client.ip, client.port)
-            ip = IP(src=self.ip, dst=client.ip)
-            tcp = TCP(sport=self.port, dport=client.port, flags="SA", seq=client.seq, ack=client.ack, options=[('MSS', 1460)])
-            ack = sr1(ip / tcp, timeout=self.timeout)
-            client.connected = True
-            client.npkts += 2
-            self.clients.append(client)
-            self._create_connection(client)
-
-    def _ack(self, p, client):
-        client.ack = p[TCP].seq + len(p[Raw])
-        ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
-        send(ack)
-
-    def _ack_rclose(self, client):
-        client.connected = False
-        client.ack += 1
-        fin_ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='FA', seq=client.seq, ack=client.ack)
-        ack = sr1(fin_ack, timeout=self.timeout)
-        client.seq += 1
-
-    def _sniff(self, client):
-        s = L3RawSocket(filter='src {0} and src port {1} and dst {2} and dst port {3}'.format(client.ip, client.port, self.ip, self.port))
-        while client.connected:
-            p = s.recv(MTU)
-            if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.port and p[TCP].sport == client.port:
-                self._ack(p, client)
-                client.npkts += 2
-                self.send('345', client)
-                client.npkts += 2
-                #if client.npkts >= client.nmax - 3:
-                #     self.close(client)
-            if p.haslayer(TCP) and p[TCP].dport == self.port and p[TCP].sport == client.port and p[TCP].flags & 0x01 == 0x01:  # FIN
-                self._ack_rclose(client)
-        s.close()
-
-    def _create_connection(self, client):
-        _connection_thread = Thread(target=self._sniff, args=(client, ), daemon=True)
-        _connection_thread.start()
-
-    def build(self, payload, client):
-        psh = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='PA', seq=client.seq, ack=client.ack) / payload
-        client.seq += len(psh[Raw])
-        return psh
-
-    def send(self, payload, client):
-        psh = self.build(payload, client)
-        sr1(psh, timeout=self.timeout)
-
-    def close(self, client):
-        client.connected = False
-        fin = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='FA', seq=client.seq, ack=client.ack)
-        fin_ack = sr1(fin, timeout=self.timeout)
-        client.seq += 1
-        client.ack = fin_ack[TCP].seq + 1
-        ack = self.ip / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
-        send(ack)
+                    elif flags == 'FA':
+                        if client.status == 'close-wait':
+                            client.status = 'closed'
+                            client.ack = pkt[TCP].seq + 1
+                            ack = IP(src=self.ip, dst=client.ip) / TCP(sport=self.port, dport=client.port, flags='A', seq=client.seq, ack=client.ack)
+                            send(ack)
+                            client.npkts += 2
+                        elif client.status == 'established':
+                            ip = IP(src=self.ip, dst=client.ip)
+                            tcp = TCP(sport=self.port, dport=client.port, flags="FA", seq=client.seq, ack=client.ack)
+                            send(ip / tcp)
+                            client.status = 'close-wait'
+                            client.npkts += 2
 
 class Session():
 
@@ -615,7 +581,7 @@ class Session():
         self.connected = False
         self.ack += 1
         fin_ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
-        ack = sr1(fin_ack, timeout=self.timeout)
+        sr1(fin_ack, timeout=self.timeout)
         self.seq += 1
 
     def _sniff(self):
@@ -624,14 +590,12 @@ class Session():
             p = s.recv(MTU)
             p.show()
             if p.haslayer(TCP) and p.haslayer(Raw) and p[TCP].dport == self.sport:
-                print('received something')
                 self._ack(p)
+                send('payload')
             elif p.haslayer(TCP) and p[TCP].dport == self.sport and p[TCP].flags & 0x01 == 0x01:  # FIN
-                print('received fin')
                 self._ack_rclose()
         s.close()
         self._ackThread = None
-        print('Acknowledgment thread stopped')
 
     def _start_ackThread(self):
         self._ackThread = Thread(name='AckThread', target=self._sniff)
@@ -645,7 +609,6 @@ class Session():
         self.ack = fin_ack[TCP].seq + 1
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
         send(ack)
-        print('Disconnected')
 
     def build(self, payload):
         psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / payload
@@ -654,9 +617,10 @@ class Session():
 
     def send(self, payload):
         psh = self.build(payload)
-        ack = sr1(psh, timeout=self.timeout)
+        sr1(psh, timeout=self.timeout)
 
-class Client():
+
+class SocketClient():
 
     def __init__(self, sport, remote, dport, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max, npkts_min, npkts_max):
         self.sport = sport
@@ -742,7 +706,7 @@ class Client():
     def _close(self):
         self.sckt.close()
 
-class Server():
+class SocketServer():
 
     def __init__(self, port, tcp_gen_path, http_gen_path, tcp_x_min, tcp_x_max, http_x_min, http_x_max):
         host = '0.0.0.0'
