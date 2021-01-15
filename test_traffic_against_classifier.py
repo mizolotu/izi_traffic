@@ -1,16 +1,20 @@
 import argparse as arp
-import json
+import json, os
 import os.path as osp
+import tflite_runtime.interpreter as tflite
+import plotly.io as pio
+import plotly.graph_objs as go
+import numpy as np
 
-from utils import *
+#from utils import *
 from tf_utils import *
-from time import time
 from sklearn.metrics import roc_curve
 from sklearn.metrics import roc_auc_score
-
-import tflite_runtime.interpreter as tflite
+from plot_utils import generate_roc_scatter
 
 if __name__ == '__main__':
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
     parser = arp.ArgumentParser(description='Detect intrusions')
     parser.add_argument('-i', '--input', help='Directory with datasets')
@@ -18,14 +22,16 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--models', help='Directory with models', default='classifiers')
     parser.add_argument('-l', '--label', help='Attack label', default='7')
     parser.add_argument('-t', '--task', default='tcp', help='Task')
-    parser.add_argument('-x', '--exclude', help='Features to exclude', default='48,49')
-
+    parser.add_argument('-x', '--exclude', help='Features to exclude', default='')
+    parser.add_argument('-f', '--figures', help='Directory with figures', default='figures/rocs')
     args = parser.parse_args()
 
     # global params
 
     seed = 0
     batch_size = 1
+    max_count = 10000
+    fpr_levels=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
     # set seed for results reproduction
 
@@ -90,18 +96,35 @@ if __name__ == '__main__':
         probs.append(p)
         l = np.array(y)[0]
         testy.append(l)
-        if p < 0.98976469039917:
-            p = 0
-        else:
-            p = 1
-        if p == l:
-            n_correct += 1
-        else:
-            n_incorrect += 1
-        #print('Accuracy = {0}'.format(n_correct / (n_correct + n_incorrect)))
+        print(p, l)
         count += 1
-        if count >= 10000:
+        if count >= max_count:
             break
     sk_auc = roc_auc_score(testy, probs)
-    print(sk_auc)
+    print('AUC = {0}'.format(sk_auc))
+    ns_fpr , ns_tpr, ns_thr = roc_curve(testy, probs)
+    thrs = []
+    for fpr_level in fpr_levels:
+        idx = np.where(ns_fpr <= fpr_level)[0][-1]
+        thrs.append(str(ns_thr[idx]))
+        print(ns_tpr[idx])
+    with open(osp.join(args.models, args.task, '{0}.thr'.format(model_label)), 'w') as f:
+        f.write(','.join(thrs))
 
+    # plot
+
+    if args.task == 'tcp':
+        colors = ['rgb(64,120,211)']
+    else:
+        colors = ['rgb(237,2,11)']
+    data = [[ns_fpr, ns_tpr]]
+    names = ['Attack {0} detection via {1} features'.format(args.label, args.task.upper())]
+    traces, layout = generate_roc_scatter(names, data, colors)
+
+    # save results
+
+    ftypes = ['png', 'pdf']
+    fig_fname = '{0}/{1}_{2}_fake'.format(args.figures, args.task, args.label)
+    fig = go.Figure(data=traces, layout=layout)
+    for ftype in ftypes:
+        pio.write_image(fig, '{0}.{1}'.format(fig_fname, ftype))
