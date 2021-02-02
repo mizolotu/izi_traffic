@@ -4,10 +4,6 @@
 
 2. Clone this repository and navigate to the project directory
 
-```bash
-pip3 install -r requirements.txt
-```
-
 # Basic usage
 
 1. Build docker container:
