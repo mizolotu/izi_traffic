@@ -42,10 +42,10 @@ sudo docker exec -dt server "python3 client.py -m <mode> -t <traffic type> -r <s
 python3 test_traffic_against_classifier.py -i <generated pcap files> -m <classifier models>
 ```
 
-### Classification based on flow features:
+#### Classification based on flow features:
 
 <img src="figures/rocs/tcp_3_fake.png" width="200"/> <img src="figures/rocs/tcp_5_fake.png" width="200"/> <img src="figures/rocs/tcp_7_fake.png" width="200"/> <img src="figures/rocs/tcp_9_fake.png" width="200"/>
 
-### Classification based on payload features (n-grams):
+#### Classification based on payload features (n-grams):
 
 <img src="figures/rocs/http_3_fake.png" width="200"/> <img src="figures/rocs/http_5_fake.png" width="200"/> <img src="figures/rocs/http_7_fake.png" width="200"/> <img src="figures/rocs/http_9_fake.png" width="200"/>
